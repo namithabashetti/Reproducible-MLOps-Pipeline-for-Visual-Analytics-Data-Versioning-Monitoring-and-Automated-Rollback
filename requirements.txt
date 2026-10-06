@@ -1,0 +1,5 @@
+# Dependencies used through Phase 2: configuration, validation, and data versioning.
+PyYAML==6.0.3
+Pillow==10.2.0
+dvc[s3]==3.67.1
+dvc-s3==3.3.0

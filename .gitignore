@@ -1,0 +1,42 @@
+# Dataset bytes are managed by DVC, never Git.
+/dataset/
+/data/processed/
+/artifacts/
+/reports/
+/runs/
+/mlruns/
+/mlartifacts/
+/mlflow.db*
+
+# Local Python environment and caches.
+/.venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.ruff_cache/
+*.egg-info/
+build/
+dist/
+
+# Credentials and local overrides.
+.env
+.env.*
+!.env.example
+/.dvc/config.local
+/.dvc/cache/
+/.dvc/tmp/
+credentials.json
+kaggle.json
+*.pem
+*.key
+
+# Model binaries belong in MLflow artifacts.
+*.pt
+*.pth
+*.onnx
+
+# Machine-specific editor and operating-system files.
+.idea/
+.vscode/
+Thumbs.db
+Desktop.ini

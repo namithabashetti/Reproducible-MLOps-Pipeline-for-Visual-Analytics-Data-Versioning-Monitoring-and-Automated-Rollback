@@ -1,0 +1,17 @@
+data:
+  seed: 42
+  split_counts:
+    train: 3500
+    validation: 500
+    monitoring: 500
+    test: 500
+  monitoring_reference_count: 250
+  monitoring_current_count: 250
+training:
+  model: yolov8n.pt
+  image_size: 416
+  batch_size: 4
+  workers: 0
+  epochs: 30
+  device: cuda:0
+  cache_images: false

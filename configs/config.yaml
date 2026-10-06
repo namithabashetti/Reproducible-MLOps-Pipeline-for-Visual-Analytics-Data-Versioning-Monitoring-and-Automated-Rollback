@@ -1,0 +1,72 @@
+dataset:
+  raw_path: dataset
+  processed_path: data/processed
+  annotation_format: pascal_voc_xml
+  provenance_status: unverified
+  classes:
+    0: helmet
+    1: head
+    2: person
+
+storage:
+  provider: backblaze_b2
+  # Remote URL, endpoint, and region are maintained in .dvc/config.
+  private: true
+  encryption_enabled: true
+  monthly_target_usd: 0
+  monthly_ceiling_usd: 1
+
+mlflow:
+  model_name: hard-hat-detector
+  backend_store_uri: sqlite:///artifacts/mlflow/mlflow.db
+  artifact_directory: artifacts/mlflow/artifacts
+  port: 5000
+
+serving:
+  host_bind_address: 127.0.0.1
+  port: 8000
+  device: cpu
+
+monitoring:
+  prometheus_port: 9090
+  grafana_port: 3000
+  input_features:
+    - mean_grayscale_intensity
+    - log_laplacian_variance
+  output_features:
+    - max_detection_confidence
+  report_empty_prediction_rate: true
+
+# Approved initial calibration policies, not scientifically validated constants.
+drift:
+  policy_status: initial_calibration
+  min_samples_per_population: 200
+  psi_threshold: 0.20
+  ks_family_alpha: 0.01
+  ks_comparisons: 3
+  ks_min_statistic: 0.10
+
+health:
+  policy_status: initial_calibration
+  readiness_interval_seconds: 10
+  readiness_failure_count: 3
+  startup_grace_seconds: 60
+  min_predictions_per_window: 100
+  consecutive_non_overlapping_windows: 2
+  server_error_rate_threshold: 0.05
+  latency_p95_floor_seconds: 2
+  latency_baseline_multiplier: 2
+  labeled_audit_min_images: 200
+  map50_95_absolute_drop_threshold: 0.05
+  drift_and_server_error_rate_threshold: 0.02
+
+rollback:
+  stable_alias: stable
+  previous_stable_alias: previous_stable
+  max_attempts_per_failed_deployment: 1
+  recovery_readiness_successes: 3
+  recovery_prediction_successes: 20
+
+demo:
+  server_error_fault_enabled: false
+  server_error_every_n_predictions: 10
