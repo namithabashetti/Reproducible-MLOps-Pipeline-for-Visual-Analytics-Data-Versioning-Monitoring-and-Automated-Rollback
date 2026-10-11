@@ -474,20 +474,23 @@ opening inbound ports or adding a cloud server. See GitHub's
 | Work directory | `_work` under the runner directory |
 | Labels used by workflow | `self-hosted`, `Windows`, `X64` |
 | Account/lifetime | Current Windows account, non-elevated; manually start/stop `run.cmd`; no Windows service or startup task |
-| Python | Existing Python 3.11.9 launcher, new `.venv` in the disposable job checkout |
+| Python | Existing Python 3.11.9 launcher, new `venv` under the runner's temporary directory |
 | Network | Outbound GitHub/package downloads; no inbound firewall changes |
 
 The checkout action cleans its job directory. A pre-check rejects any workspace
 outside `F:\visual-analytics-actions-runner\_work\` before checkout can execute.
 Never point the runner at `F:\major project implementation`: that directory holds
 the original dataset, working changes, environment, and real registry. The runner
-will use its own clone and environment; pip's local download cache may be reused.
+will use its own clone and job-temporary environment; pip's local download cache may be reused.
 
 This repository's long name produces a 238-character runner checkout path.
 Windows long-path support is already enabled on this laptop; the workflow also
 sets Git's `core.longpaths=true` through job-local environment variables. The
 first GitHub attempt failed during Git initialization before this setting was
 added. No machine-wide Git configuration or Windows registry setting was changed.
+Python's virtual-environment executable also exceeded the Windows launch path
+limit inside that checkout. CI therefore creates its environment under the shorter
+`RUNNER_TEMP\venv` path; the runner cleans its temporary directory between jobs.
 
 **Security implication:** repository workflow code runs with the Windows account's
 permissions, including access to files, OAuth tokens, and Docker that the account

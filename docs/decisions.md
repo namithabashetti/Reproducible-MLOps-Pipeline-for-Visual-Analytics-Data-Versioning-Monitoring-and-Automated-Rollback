@@ -399,6 +399,10 @@ support was already enabled. The workflow now sets `core.longpaths=true` through
 job-scoped Git environment configuration; Git initialization succeeded in the
 same directory with this setting. No global Git or Windows setting was modified.
 The failed run remains recorded rather than being presented as successful CI.
+The second attempt passed checkout but could not launch the virtual-environment
+Python executable under that same long directory. CI now builds its fresh Python
+environment in `RUNNER_TEMP\venv`, outside the long repository path. This is a
+job-temporary environment, not reuse of the development virtual environment.
 
 ## Health decisions and rollback
 

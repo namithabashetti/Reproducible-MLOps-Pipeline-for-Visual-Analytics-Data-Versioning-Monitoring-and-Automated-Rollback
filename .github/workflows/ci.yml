@@ -48,23 +48,23 @@ jobs:
         with:
           persist-credentials: false
 
-      - name: Install locked dependencies in the checkout
+      - name: Install locked dependencies in a temporary environment
         run: |
-          py -3.11 -m venv .venv
+          py -3.11 -m venv "$env:RUNNER_TEMP\venv"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          .\.venv\Scripts\python.exe -m pip install --no-input -r requirements-lock.txt
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip install --no-input -r requirements-lock.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          .\.venv\Scripts\python.exe -m pip check
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Compile project sources
         run: |
-          .\.venv\Scripts\python.exe -m compileall -q src scripts tests
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m compileall -q src scripts tests
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Run isolated tests
         run: |
-          .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m unittest discover -s tests -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Record validation scope
