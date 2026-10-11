@@ -7,23 +7,25 @@ claim that the pipeline stages have been implemented or accepted.
 
 **Original PRD storage:** DVC + Google Cloud Storage.
 
-**Approved implementation storage:** DVC + Backblaze B2.
+**Current approved storage:** DVC + Google Drive (verified 2026-10-08).
 
-**Reason:** The student project uses Backblaze B2 for object storage while retaining
-DVC for dataset version control.
+**Earlier approved storage:** DVC + Backblaze B2.
+
+**Reason:** The user requested Google Drive after B2 daily transaction caps
+interrupted recovery. DVC remains the dataset version-control tool.
 
 **Impact:** FR-03, AC-02, and the storage references in architecture, setup,
-traceability, and demonstration evidence use B2. Preserve the original PRD and
+traceability, and demonstration evidence now use Google Drive. Preserve the original PRD and
 describe this amendment explicitly instead of claiming an unchanged implementation.
 
-Use DVC's S3-compatible remote mechanism and the B2 endpoint. There is no custom
-storage wrapper, AWS account dependency, or GCS setup. The implementation path is:
+Use DVC's Google Drive integration with the user's private folder and local OAuth.
+There is no custom storage API, AWS account dependency, or GCS bucket. The current path is:
 
 ```text
-Existing Kaggle-attributed dataset -> local raw files -> DVC -> Backblaze B2
+Existing Kaggle-attributed dataset -> local raw files -> DVC -> Google Drive
 ```
 
-The approved bucket is `varshith-visual-analytics-dvc` in region `us-east-005`.
+The preserved legacy B2 bucket is `varshith-visual-analytics-dvc` in region `us-east-005`.
 Its privacy and encryption are user-confirmed, not independently verified through
 the provider API. The prefix `visual-analytics/dvc` keeps this project's DVC objects
 together. The remote URL, endpoint, and region now live in `.dvc/config`.
@@ -34,9 +36,51 @@ The user confirmed replacement-key creation and revocation of the exposed key
 during Phase 2. Use the replacement only. Do not inspect or print secret values
 as part of status checks.
 
-The user delegated selection of a minimal budget: target USD 0/month, ceiling
-USD 1/month. This is not a configured provider-side cap. No remote transfers occur
-in Phase 1, and actual retained bytes and egress must be considered before upload.
+The earlier B2 planning budget was target USD 0/month, ceiling USD 1/month.
+Drive uses a USD 0 incremental budget within existing account capacity, following
+the user's free-storage request. No additional subscription or billing enrollment
+was purchased. These are project policies, not configured provider-side caps.
+Review available capacity and usage limits before new uploads.
+
+## Google Drive migration verified
+
+On 2026-10-06 the user requested a free storage alternative and implementation of
+Google Drive if suitable. DVC Drive support and provider-specific resumable recovery
+are prepared. On 2026-10-07 the user supplied folder ID
+`15s2R1cbsqHRl_34n0u5r1SdeivW2NAVl`, now configured as the `gdrive` remote with
+download verification enabled. Its free capacity, access permissions, OAuth
+connection, upload, and full recovery were initially pending.
+Google Drive API was observed Enabled in the existing Google Cloud project
+`project-8b2f95b5-9279-4486-ab1`. The OAuth app identity form is prepared as
+`Visual Analytics DVC` with External testing audience. The console subsequently
+confirmed OAuth configuration creation after the user's action. A Desktop client
+named `Visual Analytics DVC Desktop` was created and downloaded by the user. The
+signed-in owner was added as the app's sole test user. On 2026-10-08, authenticated
+checks confirmed the supplied folder is writable, not trashed, and not shared
+publicly or domain-wide, with sufficient available account storage. Client and
+user-token JSON are stored outside the repository in the user's local application
+data directory. Upload and full recovery verification passed on 2026-10-08.
+All 10,000 files and 1,320,154,239 bytes matched the original path/content fingerprint.
+The download resumed from a retained Drive-only cache, without seeding from the
+original dataset/local cache or B2 cache. Evidence: `reports/gdrive-restore.json`.
+Drive is now the default; B2 objects and both providers' recovery caches are preserved.
+Cache namespaces were moved to match the default-remote configuration change,
+without discarding downloaded objects. No billing or payment action was taken.
+This is a second explicit PRD storage amendment; Google Drive is distinct from GCS.
+
+Use consumer-account OAuth with an owned Desktop app; no paid Workspace/service
+account, paid storage plan, or billing enrollment is part of this migration.
+Keep Google client/token JSON outside the repository. Available storage is
+shared with the account's other Google services, and API/authentication limits
+remain. Existing capacity does not establish that the account uses a free subscription.
+OAuth Testing refresh tokens for Drive expire after seven days; resolve that setup
+before unattended CI/CD. Cloud storage serves versioned data transfers, not live predictions.
+
+The Drive plugin requires PyDrive2's compatible TLS dependency range. The project
+virtual environment now resolves PyDrive2 1.21.3, pyOpenSSL 24.2.1, cryptography
+43.0.3, and asyncssh 2.23.1; these compatibility pins are recorded in the lockfile.
+Global Python packages are untouched. Future dependency updates must check both
+storage plugins rather than keeping incompatible newer TLS packages by force.
 
 ## Dataset identity and provenance
 
@@ -60,11 +104,76 @@ fingerprints. This is evidence of local recovery, not a claim of B2 transfer.
 Reports are regenerated under `reports/`; Git records the DVC pointer and this
 snapshot identity. Raw file contents are never committed to Git.
 
+On 2026-10-06, the user's terminal reported `10001 files pushed` (10,000 dataset
+objects and the directory manifest). B2 sent a Class B daily-cap notification
+during recovery. Full B2 content verification remains pending; an upload log is
+not a recovery success report. Before the original temporary cache was removed,
+4,262 completed objects were copied from that B2-only restore cache into the
+retained recovery cache, verifying every object's MD5 against its cache filename.
+No original dataset/cache objects were used to seed recovery. Verification now
+retains downloaded objects across attempts, isolated by snapshot and remote
+configuration, and labels resumed evidence explicitly. Account caps were not changed.
+
 Preserve `helmet=0`, `head=1`, and `person=2`. Keep all three classes and report
 per-class results because person annotations are much less frequent. Scene/group
-checks precede split creation. The final test set stays outside tuning; monitoring
+screening precedes split creation. The final test set stays outside tuning; monitoring
 reference and current images are disjoint. Any needed split-count adjustment must
 be documented rather than silently breaking group separation.
+
+## Phase 3: grouping, splits, and preprocessing
+
+On 2026-10-08, an all-pairs OpenCV DCT perceptual-hash screen (63 bits excluding
+DC, normal and horizontally mirrored views, maximum distance 10) found 151
+candidate pairs. All eight candidate contact sheets were visually inspected.
+Many pairs are recognizable source-image variants with different watermarks,
+brightness, or borders; some are incidental matches. The conservative policy
+keeps every candidate connection inside one split rather than asserting each
+pair is a confirmed shared scene. Connected components produce 135 groups of
+278 images, maximum size four. All remaining images are singleton groups.
+
+Source-scene metadata is unavailable. This screening cannot prove full source
+independence or detect every crop/viewpoint change. Visual inspection also found
+watermarks and reflected/warped border content already present in the supplied
+raw files. These are preserved; the pipeline does not invent repairs or silently
+remove inputs. Structural label validity does not establish annotation completeness.
+
+Seed 42 and deterministic whole-group allocation preserve the approved counts:
+3,500 train, 500 validation, 500 final test, 250 monitoring reference, and 250
+monitoring current. Class-presence balancing retains all three classes in every
+split. Person-containing images number 110/16/16/8/8 in that order. No candidate
+pair crosses any split, including the two monitoring pools. Label counts are used
+for stratification before model selection; the final test set stays outside tuning.
+
+OpenCV 4.11.0.86 and its required array dependency NumPy 1.26.4 were installed only
+in `.venv` and pinned. The existing 415/416-pixel images are padded to 416x416
+without resizing their content; generic downscaling is supported without upscaling.
+Use padding 114, centered with an odd extra pixel on the bottom/right. Preserve
+zero-origin pixel-box boundaries and convert the transformed boxes to normalized
+YOLO xywh. Write lossless uint8 PNGs; leave RGB/tensor normalization to YOLO's loader.
+No offline augmentation or denoising is introduced.
+
+Two real DVC stages connect the raw snapshot to `data/splits.json` and
+`data/processed`. The lockfile records raw, code, dependency, parameter, and output
+identities. The processed output contains 5,000 PNGs, 5,000 YOLO labels, a portable
+training YAML, and a preprocessing report (1,270,105,708 bytes total). The training
+YAML deliberately exposes only train/validation; test and monitoring require
+explicit later selection. The DVC commands target this Windows project environment.
+
+- Split manifest DVC MD5: `5829128ce0486fa652bf8c88081a60a0`
+- Processed directory DVC MD5: `d6f5cfdbcae97ff33e9aef81c1df5b75.dir`
+- Processed PNG/label manifest SHA-256: `25a92d0c07b880d45be6db7bf5a46e705fb675d8cdaa22207b25ab8fe3c26ed6`
+
+Derived outputs are cached locally and can be regenerated from raw data and the
+pinned pipeline. They have not been uploaded to Drive. No model training or GPU
+environment changes occurred in Phase 3.
+
+All eleven tests passed. An independent Pillow/XML audit checked every processed
+image pixel and all 25,502 YOLO boxes against the source, verified both content
+fingerprints, and confirmed that raw sizes/modification times were preserved.
+No candidate pair crosses a split. Evidence is in `reports/phase3-validation.json`.
+Repeated fixture preprocessing produced identical bytes; repeated DVC execution
+skipped unchanged stages. Phase 3 is complete. These checks establish conversion
+correctness, not annotation completeness or model quality.
 
 ## Local execution and dependencies
 
@@ -72,22 +181,217 @@ All training and services run on the Windows laptop. Use Python 3.11.9 in `.venv
 without inheriting global packages. Existing compatible versions may be reused in
 the isolated environment, but global packages are not upgraded or uninstalled.
 
-The initial model is YOLOv8n. Ultralytics 8.3.229 and OpenCV 4.11.0.86 are the
-approved starting versions. The global torch 2.2.2 installation is CPU-only. The
-proposed GPU combination is torch 2.2.2 / torchvision 0.17.2 with CUDA 12.1 wheels;
-it is not yet installed or verified in the project environment. GPU training is
-gated on real compatibility and smoke tests. No CUDA compatibility is inferred
-solely from the NVIDIA driver version.
+The initial model remains YOLOv8n. Ultralytics 8.3.229 and OpenCV 4.11.0.86 were
+the approved starting versions. Resolving training dependencies exposed a real
+conflict: Ultralytics 8.3.229 caps requests at 2.32.5, while the installed Google
+API dependency requires requests >=2.33.0. Its psutil cap also excludes the
+working environment. The next patch, Ultralytics 8.3.230, removes these caps;
+see the [official release](https://github.com/ultralytics/ultralytics/releases/tag/v8.3.230).
+Use that patch without changing the model architecture or downgrading Drive's
+working dependencies. OpenCV stays 4.11.0.86. All resolved versions are locked.
 
-Phase 2 installed DVC 3.67.1, dvc-s3 3.3.0, and Pillow 10.2.0 alongside PyYAML
+On 2026-10-09, torch 2.2.2+cu121 / torchvision 0.17.2+cu121 were installed only
+in the project environment. CUDA tensor and torchvision NMS checks passed on
+the RTX 3050 A Laptop GPU (4 GB), driver 592.82. The global CPU-only installation
+is untouched. The real YOLO smoke run subsequently passed one epoch plus
+checkpoint validation with finite losses and metrics. Driver compatibility
+alone is not treated as training evidence. The user connected
+the charger and Windows confirmed AC power before the training gate.
+
+Phase 2 installed DVC 3.67.1, dvc-s3 3.3.0, dvc-gdrive 3.0.1, and Pillow 10.2.0 alongside PyYAML
 6.0.3. `requirements-lock.txt` records this Windows/Python 3.11 environment.
-MLflow 3.16.1 and Evidently 0.7.23 remain candidates for later phases. They have
-not been installed or tested together. Add dependencies only in the relevant phase.
+MLflow 3.16.1 was installed and verified in Phase 5. Evidently 0.7.23 remains a
+candidate for its later phase; the monitoring stack has not been installed or
+tested together. Add dependencies only in the relevant phase.
 
 MLflow uses local SQLite metadata and local artifacts. SQLite is an embedded
 metadata file, not a new database service. Compose is approved for the real local
 services, with host ports bound to localhost. No frontend or unrelated API is in
 scope. Local model artifacts and metadata require preservation for recovery.
+
+## Phase 4 training procedure
+
+Training uses the approved 416-pixel, batch-4 YOLOv8n baseline for 30 epochs,
+with AdamW (initial learning rate 0.001, weight decay 0.0005), seed 42, zero
+loader workers, and no image RAM cache. FP32 avoids an additional AMP-check
+model download and provides a straightforward initial GPU compatibility gate.
+cuBLAS configuration is set before the first CUDA operation. Ultralytics'
+remaining defaults, including online augmentation, are recorded in `fit/args.yaml`;
+the pinned version and hardware remain part of the reproducibility record.
+
+The hardware gate checks real CUDA tensor arithmetic and torchvision NMS. The
+smoke run trains one epoch on deterministic 64/32 train/validation subsets with
+all classes present, then validates the checkpoint. Its metrics are not baseline
+quality evidence. The full baseline uses all 3,500/500 train/validation inputs.
+Both start independently from the official pretrained YOLOv8n weights.
+
+Training copies only selected inputs into ignored run directories so library
+caches cannot alter the DVC-managed dataset. Final-test and monitoring pools
+are excluded. Existing run directories are preserved, not overwritten. Lineage
+includes raw/split/processed DVC identities, checkpoint hashes, package/hardware
+details, parameters, Git SHA/dirty status, and snapshots of the actual source
+and configuration. Uncommitted work is not represented as a clean Git revision.
+
+Evaluate the best checkpoint on validation, recording precision, recall,
+mAP50, mAP50-95, and per-class results. Validation supports selection and does
+not replace the untouched final test. Check all epoch losses and reported
+aggregate metrics for finite values. Local checkpoints are not approved stable
+models. MLflow tracking/registry integration is the following phase.
+
+The 30-epoch baseline and independent best-checkpoint validation completed on
+2026-10-09. Recorded epoch time totals 4,178.35 seconds (69.6 minutes). All epoch
+values are finite. Validation precision/recall/mAP50/mAP50-95 are
+0.60943743 / 0.56788898 / 0.61936066 / 0.39427597. Per-class mAP50 is helmet
+0.93860, head 0.90010, person 0.01939. Person precision and recall are both zero
+at the reported max-F1 operating point; its evaluation covers only 16 images and
+118 boxes. Low class representation is a limitation, not an established sole
+cause. This baseline requires targeted error analysis/improvement before stable
+promotion. Phase 4 execution is complete; production suitability is not claimed.
+
+The best checkpoint SHA-256 is
+`5f725cb9f769a68ddb8f9518a979c7999b20e152d9e406e7df34f923df43fe4f`.
+`reports/phase4-validation.json` confirms checkpoint/initial-weight/source-snapshot
+hashes, exact train/validation membership, finite epoch values, unchanged DVC
+stages and preserved raw sizes/modification times. Preprocessing was reproduced
+after dependency-lock changes, with the exact same split/processed hashes as
+Phase 3. No data transfer was needed. All thirteen tests passed; CUDA tensor/NMS,
+smoke training and full baseline evaluation provide separate real execution
+evidence beyond the mocked metric-reporting unit test.
+
+Ultralytics initially used a workspace fallback for its local settings because
+the requested parent directory did not exist. After the run, settings/fonts were
+preserved under ignored `artifacts/ultralytics-settings/`, and location resolution
+was verified. The entry point now creates that parent before import. Run source
+snapshots preserve the pre-fix code actually executed; this housekeeping change
+does not alter training parameters or the completed results. Global user settings
+were not used. The next phase should record this baseline as experimental in
+MLflow, without automatically marking it stable.
+
+## Phase 5: local experiment tracking and registry
+
+On 2026-10-09, MLflow 3.16.1 was installed in the project environment. Its
+Databricks SDK dependency requires Protobuf <7, so Protobuf changed from 7.36.2
+to 6.33.6. The constrained dependency resolution preserved the existing GPU,
+NumPy/OpenCV, DVC and Drive/TLS packages. The SDK is an MLflow dependency; no
+Databricks account, remote tracking service, or new project platform was added.
+All resolved packages are pinned, `pip check` passes, and CUDA tensor/NMS plus
+both DVC storage-plugin imports still work. Training retains its original
+dependency snapshot; the later tracking environment is recorded separately.
+
+Use the approved `artifacts/mlflow/mlflow.db` SQLite store and
+`artifacts/mlflow/artifacts/` local artifact store. The dashboard binds only
+127.0.0.1:5000 with one worker. The Python importer uses the same SQLite store
+directly; HTTP access was separately verified. Usage telemetry is disabled.
+Neither cloud uploads nor billing changes are part of this phase. Preserve the
+database and artifacts together; no automatic backup/service installation is claimed.
+
+`src/tracking/mlflow_utils.py` validates a completed training bundle and logs its
+parameters, epoch curves, global/per-class validation metrics, source/configuration
+snapshot, dataset identities, input memberships and native YOLO checkpoint. It
+records the original Git SHA and dirty status without claiming a clean commit.
+The Phase 4 baseline is imported after training; MLflow timestamps describe the
+import, while original training start/time/steps remain in its evidence. Future
+full runs invoke the same importer after successful evaluation. Smoke runs do
+not automatically create registry versions. Named run directories allow later
+experiments without overwriting the baseline.
+
+The SHA-256 evidence fingerprint identifies retries. Interrupted logging or
+registration can resume serially using the existing run/version; changed evidence
+is a different bundle. Concurrent import locking is deliberately not implemented:
+run one importer per bundle at a time. Damaged input evidence is rejected before
+creating a tracking record. Retrieval compares registry checkpoint bytes, archived
+evidence, metrics, and epoch history with the originals. MLflow 3.16's numeric
+model resolver consults SDK defaults, so verification explicitly binds both
+tracking and registry URIs to the intended store.
+
+The registered model uses native `best.pt` plus format metadata, not a fabricated
+PyFunc signature or extra wrapper class. The approved FastAPI stage will load
+retrieved weights with Ultralytics; MLflow's generic model-serving endpoint is
+not used. Registry retrieval through `models:/hard-hat-detector/1/best.pt` and
+real CPU inference were tested. This inference check uses a validation image and
+does not supply a new quality estimate.
+
+- Experiment / model: `hard-hat-detector`.
+- Run ID: `473308c0c5df40d2b1095f6a5779441c`.
+- Numeric model version: `1`.
+- Approval status: `experimental`.
+- Checkpoint SHA-256: `5f725cb9f769a68ddb8f9518a979c7999b20e152d9e406e7df34f923df43fe4f`.
+- Evidence fingerprint: `9000d9c427efec8fbe7f13f228ae042c14e125de9cd91bb3b3c2f4f22f3eb38f`.
+
+Exactly one real run and one model version exist after retrying. Both survive
+server restart. Neither `stable` nor `previous_stable` is assigned: person-class
+performance remains weak, and stable approval has not occurred. Registration is
+not approval; the project has no valid rollback target yet. The explicit alias
+policy remains unchanged, and temporary-registry tests confirm that importing
+a new experimental version preserves any existing stable alias. No second model
+version or fake stable model was invented for the demonstration.
+
+All seventeen tests passed, including four real SQLite/registry tests for
+idempotent imports, interrupted logging/registration, corruption rejection,
+Windows paths with spaces, and alias preservation. The real baseline's retrieval,
+HTTP checks, restart persistence, and CPU load/predict evidence are recorded in
+`reports/phase5-validation.json`; `artifacts/training/baseline/mlflow.json` links
+the training directory to MLflow. Phase 5 tracking/registration is verified;
+stable selection remains an explicit outstanding quality/approval gate.
+
+After the dependency-lock change, DVC reproduced the split and preprocessing
+stages. Their output hashes remained identical and the final DVC status was clean.
+The metadata fingerprint of all 10,000 original dataset files also remained
+unchanged. These checks are recorded in the Phase 5 validation report. The local
+dashboard displayed the completed baseline and experimental version 1 without
+stable aliases.
+
+## Phase 6: CI preparation and runner proposal
+
+The PRD requires actual GitHub Actions build/test/deployment execution. The user's
+phase order places CI/CD before Docker/FastAPI implementation, so this increment
+prepares checkout, locked dependency installation, compilation, and isolated
+tests. Container build and deployment must be added with the real serving code
+in Phase 7. No placeholder Dockerfile, successful no-op deployment, or automatic
+model promotion is introduced. FR-10 / AC-08 remain pending end-to-end evidence.
+
+The proposed repository-scoped Windows runner lives outside the development
+checkout at `F:\visual-analytics-actions-runner`, uses `_work` for disposable
+clones, and runs manually as the current non-elevated user without a service or
+startup task. Registration has not occurred; the user's explicit prior instruction
+requires separate setup/security approval. A separate checkout prevents accidental
+checkout cleanup of the raw dataset and live registry but does not isolate the
+Windows account's files or credentials from trusted workflow code.
+
+`.github/workflows/ci.yml` is manual-only on private `main`, with read-only contents
+permission, immutable checkout-action SHA, credentials persistence disabled, a
+single concurrency group, native PowerShell failure propagation, and a pre-check
+of the runner work path before checkout. Python must be exactly 3.11.9. Each job
+gets a separate virtual environment and the existing full Windows dependency lock.
+Tests use temporary fixtures; cloud credentials, dataset pulls, real MLflow
+registration, and training are not CI steps. Logs/summary record the dispatched
+commit and dependency-lock hash. The workflow is not a substitute for reviewing
+repository writers and changes before running code on the laptop.
+
+The local dry run copies only source/scripts/tests and uses the current pinned
+environment. actionlint 1.7.12 was checksum-verified and used from ignored reports
+storage, not added to application dependencies. Native PowerShell parsing,
+workspace refusal, and failure propagation were checked. The verification report
+explicitly distinguishes this preparation from a clean install or GitHub run.
+The runner proposal, setup steps, permissions and cost references are in README.
+
+On 2026-10-09, read-only Git remote discovery advertised no HEAD/main/master refs;
+no push was made. Docker Desktop's Linux-engine pipe was unavailable. Start and
+recheck Docker before serving implementation, not as a prerequisite for source
+tests. No local runner directory/process was found at the proposed location.
+
+### Runner approval and registration — 2026-10-11
+
+The user explicitly approved the documented runner setup. Runner 2.338.0 was
+downloaded from the official actions/runner release and verified against its
+published SHA-256. GitHub confirmed this repository is private, the existing
+credential has administrative access, and no runner was previously registered.
+`visual-analytics-laptop` is now registered using the separate approved directory,
+standard Windows/x64 labels, and `_work` checkout folder. It is not a Windows
+service. Registration used the existing Git Credential Manager sign-in and a
+short-lived token passed only through the runner process environment. Token values
+were not printed or stored by the setup script. The runner is manually launched
+with `--once` for the first validation job and exits after that job.
 
 ## Health decisions and rollback
 
@@ -110,11 +414,15 @@ The private GitHub repository already exists; use it and preserve remote changes
 The user approved Phase 1 foundation after Phase 0 review. Subsequent phases are
 delivered incrementally with their own validation reports.
 
-The self-hosted GitHub Actions runner needs a separate, concrete setup/security
-review and approval before registration. Do not imply that GitHub-hosted jobs can
+The self-hosted GitHub Actions runner received separate setup/security approval
+on 2026-10-11 and has been registered. Do not imply that GitHub-hosted jobs can
 reach local services without an approved mechanism. No cloud deployment is planned.
 
-Still deferred: authenticated DVC push/pull until the local credential prompt runs,
-scene/group review, CUDA training verification,
-later dependency resolution, runner approval, and measured threshold calibration.
+Phase 2 Google Drive recovery passed. Incomplete legacy B2 recovery is no longer
+a delivery gate. Phase 3 grouping and preprocessing are implemented with the
+documented scene-independence limitation. CUDA checks, smoke training, and the
+full Phase 4 baseline/evaluation passed. Phase 5 local tracking, registration,
+and retrieval are verified. Person detection remains a model-quality limitation
+before stable promotion. Still deferred: later dependency resolution,
+verified CI execution/container deployment, and measured threshold calibration.
 These do not prevent the repository foundation from being completed.

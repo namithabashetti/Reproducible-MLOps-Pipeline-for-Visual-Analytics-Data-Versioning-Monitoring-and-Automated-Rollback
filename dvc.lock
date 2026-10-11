@@ -1,0 +1,90 @@
+schema: '2.0'
+stages:
+  split:
+    cmd: .venv\Scripts\python.exe -m src.data.split
+    deps:
+    - path: dataset
+      hash: md5
+      md5: cd17bcaf3c75b4bf1ba13f802ecc2055.dir
+      size: 1320154239
+      nfiles: 10000
+    - path: requirements-lock.txt
+      hash: md5
+      md5: bf5685c58fdb95cf6b827ec02a68d504
+      size: 3524
+    - path: src/data/split.py
+      hash: md5
+      md5: 38d5b5439de2d7e3196173d074828878
+      size: 6256
+    - path: src/data/validate.py
+      hash: md5
+      md5: cf97874a62ca6972f070159efc08e8ec
+      size: 6508
+    params:
+      params.yaml:
+        data:
+          seed: 42
+          split_counts:
+            train: 3500
+            validation: 500
+            monitoring: 500
+            test: 500
+          monitoring_reference_count: 250
+          monitoring_current_count: 250
+          group_hash_distance: 10
+      configs/config.yaml:
+        dataset.classes:
+          0: helmet
+          1: head
+          2: person
+        dataset.raw_path: dataset
+    outs:
+    - path: data/splits.json
+      hash: md5
+      md5: 5829128ce0486fa652bf8c88081a60a0
+      size: 179197
+  preprocess:
+    cmd: .venv\Scripts\python.exe -m src.data.preprocess
+    deps:
+    - path: data/splits.json
+      hash: md5
+      md5: 5829128ce0486fa652bf8c88081a60a0
+      size: 179197
+    - path: dataset
+      hash: md5
+      md5: cd17bcaf3c75b4bf1ba13f802ecc2055.dir
+      size: 1320154239
+      nfiles: 10000
+    - path: requirements-lock.txt
+      hash: md5
+      md5: bf5685c58fdb95cf6b827ec02a68d504
+      size: 3524
+    - path: src/data/preprocess.py
+      hash: md5
+      md5: 0aadc30dafb01582f7dc685592a6f23e
+      size: 6816
+    - path: src/data/validate.py
+      hash: md5
+      md5: cf97874a62ca6972f070159efc08e8ec
+      size: 6508
+    params:
+      params.yaml:
+        preprocessing:
+          pad_value: 114
+        training.image_size: 416
+      configs/config.yaml:
+        dataset:
+          raw_path: dataset
+          processed_path: data/processed
+          annotation_format: pascal_voc_xml
+          provenance_status: unverified
+          classes:
+            0: helmet
+            1: head
+            2: person
+    outs:
+    - path: data/processed
+      hash: md5
+      md5: d6f5cfdbcae97ff33e9aef81c1df5b75.dir
+      size: 1270105708
+      nfiles: 10002

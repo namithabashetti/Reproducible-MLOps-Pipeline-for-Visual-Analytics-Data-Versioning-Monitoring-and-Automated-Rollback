@@ -1,0 +1,30 @@
+stages:
+  split:
+    cmd: .venv\Scripts\python.exe -m src.data.split
+    deps:
+      - dataset
+      - src/data/split.py
+      - src/data/validate.py
+      - requirements-lock.txt
+    params:
+      - data
+      - configs/config.yaml:
+          - dataset.raw_path
+          - dataset.classes
+    outs:
+      - data/splits.json
+  preprocess:
+    cmd: .venv\Scripts\python.exe -m src.data.preprocess
+    deps:
+      - dataset
+      - data/splits.json
+      - src/data/preprocess.py
+      - src/data/validate.py
+      - requirements-lock.txt
+    params:
+      - training.image_size
+      - preprocessing
+      - configs/config.yaml:
+          - dataset
+    outs:
+      - data/processed

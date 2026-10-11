@@ -9,12 +9,12 @@ dataset:
     2: person
 
 storage:
-  provider: backblaze_b2
-  # Remote URL, endpoint, and region are maintained in .dvc/config.
+  provider: google_drive
+  # Remote destinations are maintained in .dvc/config; B2 is retained as legacy.
   private: true
   encryption_enabled: true
   monthly_target_usd: 0
-  monthly_ceiling_usd: 1
+  monthly_ceiling_usd: 0
 
 mlflow:
   model_name: hard-hat-detector

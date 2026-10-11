@@ -26,6 +26,9 @@ dist/
 /.dvc/cache/
 /.dvc/tmp/
 credentials.json
+client_secret*.json
+google-oauth-client.json
+google-user-token.json
 kaggle.json
 *.pem
 *.key

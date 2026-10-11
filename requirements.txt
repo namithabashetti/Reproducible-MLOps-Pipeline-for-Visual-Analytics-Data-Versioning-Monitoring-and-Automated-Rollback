@@ -1,5 +1,13 @@
-# Dependencies used through Phase 2: configuration, validation, and data versioning.
+# Windows/Python 3.11 environment through Phase 5.
+--extra-index-url https://download.pytorch.org/whl/cu121
 PyYAML==6.0.3
 Pillow==10.2.0
-dvc[s3]==3.67.1
+dvc[s3,gdrive]==3.67.1
 dvc-s3==3.3.0
+dvc-gdrive==3.0.1
+numpy==1.26.4
+opencv-python==4.11.0.86
+torch==2.2.2+cu121
+torchvision==0.17.2+cu121
+ultralytics==8.3.230
+mlflow==3.16.1

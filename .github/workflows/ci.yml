@@ -1,0 +1,77 @@
+name: Local validation
+
+on:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: visual-analytics-laptop
+  cancel-in-progress: false
+
+jobs:
+  validate:
+    if: >-
+      github.ref == 'refs/heads/main' &&
+      github.event.repository.private == true &&
+      github.repository == 'varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback'
+    runs-on: [self-hosted, Windows, X64]
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: powershell
+    env:
+      PYTHONUTF8: '1'
+      PYTHONUNBUFFERED: '1'
+      PIP_DISABLE_PIP_VERSION_CHECK: '1'
+      MLFLOW_DISABLE_TELEMETRY: 'true'
+      MLFLOW_DISABLE_AGENT_HINT: '1'
+      DVC_NO_ANALYTICS: 'true'
+
+    steps:
+      - name: Check runner workspace and Python
+        run: |
+          $workspace = [IO.Path]::GetFullPath($env:GITHUB_WORKSPACE)
+          if (-not $workspace.StartsWith('F:\visual-analytics-actions-runner\_work\', [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Use the dedicated runner checkout, never the development or dataset directory.'
+          }
+          py -3.11 -c "import sys; assert sys.version_info[:3] == (3, 11, 9), sys.version; print(sys.version)"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Checkout the dispatched commit
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6.0.2
+        with:
+          persist-credentials: false
+
+      - name: Install locked dependencies in the checkout
+        run: |
+          py -3.11 -m venv .venv
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pip install --no-input -r requirements-lock.txt
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          .\.venv\Scripts\python.exe -m pip check
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Compile project sources
+        run: |
+          .\.venv\Scripts\python.exe -m compileall -q src scripts tests
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Run isolated tests
+        run: |
+          .\.venv\Scripts\python.exe -m unittest discover -s tests -v
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Record validation scope
+        run: |
+          $lockHash = (Get-FileHash -LiteralPath requirements-lock.txt -Algorithm SHA256).Hash.ToLowerInvariant()
+          @"
+          ## Local validation passed
+          Commit: $env:GITHUB_SHA
+          Dependency lock SHA-256: $lockHash
+          Python: 3.11.9 / Windows
+          Source compilation, dependency consistency and isolated tests passed.
+          Docker build and deployment await the Phase 7 serving implementation.
+          This run does not train, transfer the dataset, or promote a model.
+          "@ | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append

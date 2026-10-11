@@ -7,6 +7,10 @@ data:
     test: 500
   monitoring_reference_count: 250
   monitoring_current_count: 250
+  # Conservative near-duplicate screening, including horizontal mirrors.
+  group_hash_distance: 10
+preprocessing:
+  pad_value: 114
 training:
   model: yolov8n.pt
   image_size: 416
@@ -15,3 +19,8 @@ training:
   epochs: 30
   device: cuda:0
   cache_images: false
+  amp: false
+  optimizer: AdamW
+  learning_rate: 0.001
+  weight_decay: 0.0005
+  deterministic: true
