@@ -28,6 +28,10 @@ jobs:
       MLFLOW_DISABLE_TELEMETRY: 'true'
       MLFLOW_DISABLE_AGENT_HINT: '1'
       DVC_NO_ANALYTICS: 'true'
+      # Git needs its own long-path flag for this repository's long Windows checkout.
+      GIT_CONFIG_COUNT: '1'
+      GIT_CONFIG_KEY_0: core.longpaths
+      GIT_CONFIG_VALUE_0: 'true'
 
     steps:
       - name: Check runner workspace and Python

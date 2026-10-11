@@ -393,6 +393,13 @@ short-lived token passed only through the runner process environment. Token valu
 were not printed or stored by the setup script. The runner is manually launched
 with `--once` for the first validation job and exits after that job.
 
+The first real GitHub job passed preflight but failed checkout because Git could
+not create `.git/hooks` under the 238-character workspace path. Windows long-path
+support was already enabled. The workflow now sets `core.longpaths=true` through
+job-scoped Git environment configuration; Git initialization succeeded in the
+same directory with this setting. No global Git or Windows setting was modified.
+The failed run remains recorded rather than being presented as successful CI.
+
 ## Health decisions and rollback
 
 PSI/KS are evidence sources, not rollback commands. The approved policy combines

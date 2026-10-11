@@ -483,6 +483,12 @@ Never point the runner at `F:\major project implementation`: that directory hold
 the original dataset, working changes, environment, and real registry. The runner
 will use its own clone and environment; pip's local download cache may be reused.
 
+This repository's long name produces a 238-character runner checkout path.
+Windows long-path support is already enabled on this laptop; the workflow also
+sets Git's `core.longpaths=true` through job-local environment variables. The
+first GitHub attempt failed during Git initialization before this setting was
+added. No machine-wide Git configuration or Windows registry setting was changed.
+
 **Security implication:** repository workflow code runs with the Windows account's
 permissions, including access to files, OAuth tokens, and Docker that the account
 can access. A separate checkout is not a security sandbox. Read-only GitHub token
