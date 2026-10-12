@@ -1,7 +1,17 @@
-name: Local validation
+name: Local validation and serving
 
 on:
   workflow_dispatch:
+    inputs:
+      deployment:
+        description: Local deployment after validation and Docker build
+        type: choice
+        options: [none, stable, experimental]
+        default: none
+      model_version:
+        description: Explicit numeric version (required for experimental deployment)
+        type: string
+        default: ''
 
 permissions:
   contents: read
@@ -72,7 +82,26 @@ jobs:
           & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m unittest discover -s tests -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Build CPU serving image
+        run: |
+          & "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe" build --progress plain -t "visual-analytics-api:$env:GITHUB_SHA" .
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
+      - name: Deploy selected local registry version
+        if: inputs.deployment != 'none'
+        env:
+          DEPLOYMENT_MODE: ${{ inputs.deployment }}
+          MODEL_VERSION: ${{ inputs.model_version }}
+        run: |
+          $deployArgs = @('-m', 'src.serving.deploy', '--store-project', 'F:\major project implementation', '--image', "visual-analytics-api:$env:GITHUB_SHA")
+          if ($env:MODEL_VERSION) { $deployArgs += @('--version', $env:MODEL_VERSION) }
+          if ($env:DEPLOYMENT_MODE -eq 'experimental') { $deployArgs += '--experimental' }
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" @deployArgs
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Record validation scope
+        env:
+          DEPLOYMENT_MODE: ${{ inputs.deployment }}
         run: |
           @'
           import hashlib
@@ -86,7 +115,9 @@ jobs:
           Dependency lock SHA-256: {lock_hash}
           Python: 3.11.9 / Windows
           Source compilation, dependency consistency and isolated tests passed.
-          Docker build and deployment await the Phase 7 serving implementation.
+          CPU Docker image built: visual-analytics-api:{os.environ["GITHUB_SHA"]}
+          Deployment selection: {os.environ["DEPLOYMENT_MODE"]}
+          Selected deployments require matching readiness and a real prediction probe.
           This run does not train, transfer the dataset, or promote a model.
           """
           with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:

@@ -1,4 +1,4 @@
-# Windows/Python 3.11 environment through Phase 5.
+# Windows/Python 3.11 environment through Phase 7.
 --extra-index-url https://download.pytorch.org/whl/cu121
 PyYAML==6.0.3
 Pillow==10.2.0
@@ -11,3 +11,5 @@ torch==2.2.2+cu121
 torchvision==0.17.2+cu121
 ultralytics==8.3.230
 mlflow==3.16.1
+fastapi==0.143.0
+uvicorn==0.54.0

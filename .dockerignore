@@ -1,0 +1,10 @@
+# Allowlist: never send datasets, credentials, Git history, or model artifacts to the builder.
+**
+!Dockerfile
+!requirements-serving.txt
+!src/
+!src/serving/
+!src/serving/api.py
+!src/data/
+!src/data/preprocess.py
+!src/data/validate.py

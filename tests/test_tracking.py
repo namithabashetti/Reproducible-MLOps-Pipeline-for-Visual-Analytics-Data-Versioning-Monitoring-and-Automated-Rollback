@@ -124,6 +124,35 @@ class TrackingTests(unittest.TestCase):
         with self.assertRaisesRegex(ValueError, "finite values"):
             read_completed_run(self.directory)
 
+    def test_serving_stages_exact_version_and_refuses_corruption(self):
+        from src.serving.deploy import stage_model
+
+        config_path = self.root / "configs/config.yaml"
+        registry_config = yaml.safe_load(config_path.read_text())["mlflow"]
+        config = yaml.safe_load((Path(__file__).resolve().parents[1] / "configs/config.yaml").read_text())
+        config["mlflow"] = registry_config
+        config_path.write_text(yaml.safe_dump(config))
+        parameters = self.directory / "source/params.yaml"
+        parameters.write_text("preprocessing:\n  pad_value: 114\n")
+        lineage_path = self.directory / "lineage.json"
+        lineage = json.loads(lineage_path.read_text())
+        lineage["parameters"]["image_size"] = 416
+        lineage["file_sha256"]["params.yaml"] = file_hash(parameters)
+        lineage_path.write_text(json.dumps(lineage))
+        registered = log_completed_run(self.root, self.directory)
+        staged, manifest = stage_model(self.root, self.root, registered["model_version"], experimental=True)
+        self.assertEqual(file_hash(staged / "best.pt"), registered["checkpoint_sha256"])
+        self.assertEqual(manifest["deployment_mode"], "experimental")
+        client, _, _ = local_store(self.root)
+        self.assertEqual(client.get_registered_model(registered["model_name"]).aliases, {})
+        client.set_registered_model_alias(registered["model_name"], "stable", registered["model_version"])
+        _, approved = stage_model(self.root, self.root)
+        self.assertEqual(approved["model_version"], registered["model_version"])
+        self.assertEqual(approved["deployment_mode"], "approved")
+        (staged / "best.pt").write_bytes(b"corrupt local copy")
+        with self.assertRaisesRegex(ValueError, "staged checkpoint is corrupt"):
+            stage_model(self.root, self.root, registered["model_version"], experimental=True)
+
 
 if __name__ == "__main__":
     unittest.main()

@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 6 GitHub CI validation passed; Docker build/deployment await Phase 7.**
+**Current status: Phase 7 local Docker/FastAPI serving verified; expanded CI verification in progress.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; the current suite has seventeen passing tests.
+Evidence: `reports/phase3-validation.json`; serving checks extend the earlier seventeen-test suite.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -17,7 +17,7 @@ The CUDA smoke run and 30-epoch baseline completed with finite losses and metric
 Best-checkpoint validation mAP50 is 61.94%, but person detection is weak
 (1.94% per-class mAP50). This is an experimental baseline, not an approved stable
 model. MLflow now records this baseline as `hard-hat-detector` version 1.
-Local tracking is verified. Serving, deployment, monitoring, and rollback remain future work. Neither `stable`
+Local tracking and experimental CPU serving are verified. Monitoring and rollback remain future work. Neither `stable`
 nor `previous_stable` has been assigned.
 
 ## Approved lifecycle
@@ -56,6 +56,11 @@ FR-03 and amended AC-02 now use Drive. The original PRD remains unchanged; see
 | `src/training/train.py` | CUDA checks, isolated train/validation copies, source/data lineage, and YOLOv8n training. |
 | `src/training/evaluate.py` | Checkpoint evaluation on validation data, global/per-class metrics, and checkpoint hash. |
 | `src/tracking/mlflow_utils.py` | Validate/import completed training evidence, register an experimental version, verify retrieval, and launch local MLflow. |
+| `src/serving/api.py` | Verify/load the staged checkpoint, warm up CPU inference, validate PNG/JPEG requests, and return boxes in original-image coordinates. |
+| `src/serving/deploy.py` | Resolve registry aliases or an explicit experimental version, verify all evidence, stage bytes, run Docker, and verify readiness/prediction. |
+| `Dockerfile` / `.dockerignore` | Build the CPU runtime from an allowlisted context; exclude datasets, weights, credentials and Git history. |
+| `requirements-serving.txt` | Separate pinned Linux CPU serving dependency closure, checked by pip inside the image. |
+| `tests/test_serving.py` | API status/identity, image bounds, coordinate mapping, checkpoint integrity, and deployment approval gates. |
 | `.github/workflows/ci.yml` | Manual Windows validation: isolated checkout, locked dependencies, source compilation, tests, and commit/lock evidence. |
 | `dvc.yaml` / `dvc.lock` | Data-stage commands, dependencies, parameters, and resulting output identities. |
 | `scripts/b2_session.py` | Masked credential entry for real DVC commands; secrets remain in process memory. |
@@ -104,16 +109,17 @@ requiring a PowerShell execution-policy change. The environment does not inherit
 global site-packages. pip may reuse cached distributions, but the global Python
 installation is not modified.
 
-`requirements.txt` lists direct dependencies through Phase 5: PyYAML, Pillow, DVC,
+`requirements.txt` lists direct dependencies through Phase 7: PyYAML, Pillow, DVC,
 its S3 and Google Drive integrations, NumPy, OpenCV, PyTorch, torchvision, and
-Ultralytics, and MLflow. `requirements-lock.txt` pins their resolved Windows/Python
-3.11 dependencies. It is not a lock for the future Linux serving container.
-MLflow is pinned to 3.16.1. Its server dependencies include FastAPI; that does not
-implement the project's future prediction service. Monitoring packages are not installed yet.
+Ultralytics, MLflow, FastAPI and Uvicorn. `requirements-lock.txt` pins their resolved
+Windows/Python 3.11 dependencies. FastAPI/Uvicorn were already present through
+MLflow; naming them as direct serving dependencies did not change this lock.
+The Linux image uses `requirements-serving.txt`, CPU PyTorch 2.2.2/torchvision 0.17.2,
+and the same Ultralytics 8.3.230. Monitoring packages are not installed yet.
 
 Docker Desktop 4.94.0, Engine 29.8.2, Compose 5.5.1, and WSL 2 were detected during
 preparation. The Linux engine is reachable, and the user verified `hello-world`.
-A serving-image build remains a future validation task.
+The Phase 7 CPU serving image has been built and exercised on this Linux engine.
 
 The project environment uses torch `2.2.2+cu121`, torchvision `0.17.2+cu121`, and
 Ultralytics `8.3.230`. The global CPU-only installation is untouched. GPU tensor
@@ -383,7 +389,7 @@ metrics/history with the training files. Missing or altered evidence causes an e
 
 The registry stores the **native Ultralytics checkpoint** as `model/best.pt`, with
 format metadata. This is not an MLflow PyFunc flavor or an MLflow serving endpoint.
-The later FastAPI stage can resolve a specific registry version, download its
+The FastAPI deployment stage resolves a specific registry version, retrieves its
 checkpoint, and load it with `ultralytics.YOLO`; no custom model-wrapper class is
 needed. See the official [MLflow client API](https://mlflow.org/docs/latest/api_reference/python_api/mlflow.client.html)
 and [artifact-store architecture](https://mlflow.org/docs/latest/self-hosting/architecture/artifact-store/).
@@ -435,19 +441,21 @@ The baseline run and experimental version were also checked in the MLflow UI.
 
 ## Phase 6: local CI and runner setup
 
-`.github/workflows/ci.yml` prepares the real validation part of CI/CD:
+`.github/workflows/ci.yml` implements manual local CI and optional deployment:
 
 ```text
 Manual dispatch on main -> runner/Python preflight -> checkout dispatched commit
-  -> install locked dependencies -> compile sources -> isolated tests -> summary
+  -> install locked dependencies -> compile sources -> isolated tests -> Docker build
+  -> optional explicit deployment -> matching readiness/prediction probe -> summary
 ```
 
 The user approved runner installation/registration on 2026-10-11. The official
 Windows x64 runner 2.338.0 is checksum-verified and registered to this repository.
-GitHub validation passed on 2026-10-12. Docker build/deployment will extend this workflow
-after Phase 7 supplies the serving application, Dockerfile, and health checks.
-Until then, FR-10 / AC-08 are not complete; a source compilation check is not a
-container build. Stable model approval also remains pending.
+GitHub validation passed on 2026-10-12. Phase 7 adds real Docker build/deployment
+steps. Dispatch `deployment=none` (default) to validate/build, `experimental` with
+an explicit `model_version` to demonstrate an unapproved model, or `stable` to
+resolve the reviewed alias. Stable deployment currently refuses because no such
+alias exists. This workflow never changes registry aliases or approval tags.
 
 The workflow accepts only manual `workflow_dispatch` runs from `main` in the
 existing private repository. It has read-only repository permissions, a pinned
@@ -565,6 +573,84 @@ Docker Desktop's Linux engine was unavailable during the Phase 6 check. This
 does not prevent these CI tests; start Docker Desktop and verify the engine
 before Phase 7 container work. Do not treat earlier Docker verification as proof
 that the engine is currently running.
+
+## Phase 7: local Docker and FastAPI serving
+
+Start Docker Desktop before building. From the project directory in PowerShell:
+
+```powershell
+$docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+& $docker build -t visual-analytics-api:phase7 .
+.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental
+Invoke-RestMethod http://127.0.0.1:8000/health
+```
+
+`deploy.py` accesses the local SQLite registry directly, so the MLflow dashboard
+need not run. It checks the finished run, registered source, bundle and checkpoint
+hashes, then stages an immutable version/settings directory under
+`artifacts/serving/`. Staging retries reuse matching bytes and refuse corruption.
+The container receives only that directory, mounted read-only; it needs no Drive,
+MLflow, dataset, or credential access. No weights or dataset enter the Docker build.
+
+The deployed image is resolved to its exact Docker image ID. The container runs
+as user 10001, with a read-only filesystem and writable temporary directory,
+one Uvicorn worker, and two CPU threads. Only host loopback port 8000 is published.
+`/health` becomes ready after SHA-256 verification, model/class validation and a
+warm-up prediction. The host deployment also checks the returned model/settings
+and sends a real synthetic-image prediction before reporting success. Readiness
+means the service loaded; it is not a model-quality or overall-health decision.
+
+Send **raw image bytes**, not JSON, a path, or multipart form data:
+
+```powershell
+curl.exe --fail-with-body -H "Content-Type: image/png" --data-binary "@dataset/images/hard_hat_workers101.png" http://127.0.0.1:8000/predict
+& $docker logs visual-analytics-api
+& $docker stop visual-analytics-api
+```
+
+The prediction response includes model name/version, checkpoint hash, experimental
+status, oriented input dimensions, and `class_id`, `class_name`, `confidence`,
+`xyxy` for each detection. Coordinates refer to the decoded, EXIF-oriented image.
+The same OpenCV letterbox function used in preprocessing pads/downscales to 416
+without upscaling; inverse transforms map boxes back to the input dimensions.
+Confidence 0.25, IoU 0.70, max 300 detections, CPU FP32 and no inference augmentation
+are recorded settings. These are starting inference defaults, not calibrated health
+thresholds or accuracy claims. Requests accept static PNG/JPEG, at most 4 MiB encoded
+and 4,194,304 decoded pixels. Invalid content returns 415/422, oversized images 413,
+not-ready 503, and inference failures 500. An empty detection list is a valid result.
+There is no `/metrics` endpoint yet; Prometheus belongs to Phase 8.
+
+`artifacts/serving/deployment.json` points to the last deployment attempt; per-container
+receipts preserve its image ID, source revision/dirty state, model lineage, settings,
+readiness and prediction result. Replacements briefly interrupt serving. This phase
+does not automatically recover a failed deployment: the host reports failure and
+leaves logs for inspection. Only a container labeled for this project can be replaced.
+Do not run simultaneous manual deployments; CI already serializes its jobs.
+
+Without `--experimental`, only numeric versions referenced by `stable` or
+`previous_stable` may deploy; omitting the version resolves `stable` explicitly.
+Neither alias currently exists. Do not assign either merely to make CI pass.
+The same `deploy()` procedure is available for approved normal deployment and the
+future rollback controller; automatic target selection/recovery belongs to Phase 11.
+
+The approved self-hosted runner uses its isolated checkout for code/image builds
+and `--store-project 'F:\major project implementation'` for this laptop's local
+registry/staging directory. It never checks out over the original dataset or uses
+the development virtual environment. Docker must already be running. Linux package
+pins and the Python base-image digest are committed; Debian system packages come
+from Bookworm repositories at build time, so byte-identical rebuilds are not claimed.
+The final image ID identifies the actual deployment.
+
+| File/function | Inputs and processing | Output / requirement / evidence |
+| --- | --- | --- |
+| `api.py`: `load_model`, `predict_image`, `predict` | Verified local checkpoint, frozen manifest, bounded image body; shared preprocessing and serialized CPU inference | Readiness/JSON detections; FR-12; API contract tests and real container requests |
+| `deploy.py`: `stage_model`, `deploy` | Registry version/alias, local bundle, Docker image; verify hashes and deployment identity | Staged checkpoint and deployment receipt; FR-09/FR-11; real registry fixture and container checks |
+| `Dockerfile`, `.dockerignore`, `requirements-serving.txt` | Allowlisted source plus Linux CPU dependencies | Non-root image without credentials/data; FR-11; build and pip consistency checks |
+| `.github/workflows/ci.yml` | Explicit dispatch and repository commit | Tests/build/optional deployment; FR-10/AC-08; actual GitHub run evidence |
+
+The app uses FastAPI's [lifespan loading](https://fastapi.tiangolo.com/advanced/events/),
+Ultralytics' [prediction results](https://docs.ultralytics.com/modes/predict/), and
+Docker's [build-context and base-image guidance](https://docs.docker.com/build/building/best-practices/).
 
 ## Storage and credentials
 
@@ -763,8 +849,9 @@ model, then checks readiness and successful predictions before claiming recovery
 Use the existing private GitHub repository and `main`. Actions is reported enabled.
 GitHub Actions cannot deploy to this laptop without an execution mechanism. A
 repository-scoped local runner was approved and registered on 2026-10-11.
-GitHub validation has passed; Docker build/deployment remain unverified until
-the serving implementation and its actual checks are complete.
+GitHub validation has passed. Phase 7 extends the workflow to build the real CPU
+image and optionally deploy a selected local registry model. Local serving checks
+passed; the expanded GitHub run is recorded separately when complete.
 
 Proceed through data/DVC, preprocessing, training, MLflow, CI/CD, serving,
 operational monitoring, drift, health, rollback, and final validation incrementally.
@@ -782,8 +869,8 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-06 / FR-07 | CUDA smoke run, 30-epoch baseline, best-checkpoint metrics, source/data/checkpoint lineage | Training/evaluation complete; weak person class prevents treating this baseline as stable |
 | FR-08 / tracking acceptance | Local SQLite run, parameters, epoch/global/per-class metrics, artifacts, DVC/source identities | Verified |
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
-| FR-10 / AC-08 | Successful GitHub run with fresh dependencies, compilation, 17 tests and summary | CI validation verified; full build/deployment await serving |
-| FR-11 / FR-12 | Approved Docker/FastAPI local serving design | Pending Phase 7 |
+| FR-10 / AC-08 | Phase 6 GitHub validation; Phase 7 adds real build and optional deployment steps | Expanded CI verification in progress; stable promotion is separate |
+| FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 to FR-18 | Approved monitoring and calibration policies | Pending |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
 
@@ -801,4 +888,7 @@ its mocked evaluation test does not establish model quality. `tests/test_trackin
 uses real temporary SQLite databases and artifact stores to test imports, retries,
 corruption detection, and alias preservation. Its tiny checkpoint bytes are fixtures,
 not trained models. The actual registered baseline has separate retrieval/inference
-evidence in `reports/phase5-validation.json`. All seventeen tests passed.
+evidence in `reports/phase5-validation.json`. The serving tests add request/status,
+coordinate, corruption and approval checks; the tracking tests also exercise
+staging from a real temporary registry. Real container predictions are recorded
+separately in `reports/phase7-api-validation.json`.

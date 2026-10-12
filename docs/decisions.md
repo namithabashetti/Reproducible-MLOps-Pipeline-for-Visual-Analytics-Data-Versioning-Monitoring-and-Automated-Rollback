@@ -452,6 +452,43 @@ normal deployment and rollback, with numeric model identity and recovery checks.
 The demo-only server-error fault is disabled by default and must not survive the
 restoration of the known-good deployment.
 
+## Phase 7 serving implementation — 2026-10-12
+
+Docker Desktop was started and its Linux engine verified with `hello-world`.
+The service uses a Python 3.11.9 Bookworm base pinned by digest, a separate Linux
+CPU dependency closure, FastAPI 0.143.0, Uvicorn 0.54.0 and the existing YOLO/PyTorch
+versions. Pip consistency passed inside the image. There is no CUDA, MLflow or DVC
+dependency in the image. The Windows lock and data stages are unchanged.
+
+The host retrieves all registered evidence and verifies its bundle/checkpoint
+hashes before staging a numeric model version. Stable/previous_stable aliases
+are the only approved deployment references; experimental use requires an explicit
+version and flag. No real aliases/tags were changed. Local version 1 is still an
+experimental model with weak person-class performance. The container receives only
+read-only staged files and uses CPU inference, preserving the training letterbox
+behavior and recording its settings. No cloud storage is involved in serving.
+
+The API accepts raw PNG/JPEG bytes, avoiding an unnecessary multipart dependency.
+The recorded starting settings are confidence 0.25, IoU 0.70, 300 maximum boxes,
+two CPU threads, 4 MiB encoded-body and 4,194,304 decoded-pixel limits. These bound
+local work and freeze prediction behavior; they are not health calibration results.
+Readiness follows verified loading and warm-up; deployment additionally sends a
+prediction probe. Image/coordinate/identity checks and seven detections on an
+existing validation image passed. No final-test or monitoring images were used.
+
+Image builds use an allowlisted context, with no datasets, credentials or models.
+Containers run as a non-root user, with a read-only root filesystem and a temporary
+write area, published only on 127.0.0.1:8000. Deployment receipts preserve exact
+image IDs, code revisions, model lineage and settings. Debian OS dependencies are
+resolved at build time; a byte-identical rebuild is not claimed. Replacement has
+brief downtime. Automatic recovery, metrics and drift remain their later phases.
+
+The approved repository runner now builds this image after tests and can invoke
+the same deployment procedure with explicit dispatch settings. Default dispatch
+only validates/builds. Local model access is an explicit host path; there is no
+claim of GitHub-hosted access to this laptop. The extended GitHub run remains to
+be verified separately from the successful local container checks.
+
 ## Delivery gates
 
 The private GitHub repository already exists; use it and preserve remote changes.
@@ -467,6 +504,7 @@ a delivery gate. Phase 3 grouping and preprocessing are implemented with the
 documented scene-independence limitation. CUDA checks, smoke training, and the
 full Phase 4 baseline/evaluation passed. Phase 5 local tracking, registration,
 and retrieval are verified. Person detection remains a model-quality limitation
-before stable promotion. Still deferred: later dependency resolution,
-verified container build/deployment, and measured threshold calibration.
+before stable promotion. Phase 7 local container build and experimental deployment
+are verified. Still deferred: expanded CI evidence, later dependency resolution,
+and measured threshold calibration.
 These do not prevent the repository foundation from being completed.

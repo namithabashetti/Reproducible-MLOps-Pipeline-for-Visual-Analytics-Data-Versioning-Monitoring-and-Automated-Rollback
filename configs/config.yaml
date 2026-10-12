@@ -26,6 +26,12 @@ serving:
   host_bind_address: 127.0.0.1
   port: 8000
   device: cpu
+  confidence: 0.25
+  iou: 0.70
+  max_detections: 300
+  cpu_threads: 2
+  max_upload_bytes: 4194304
+  max_image_pixels: 4194304
 
 monitoring:
   prometheus_port: 9090
