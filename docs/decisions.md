@@ -486,8 +486,17 @@ brief downtime. Automatic recovery, metrics and drift remain their later phases.
 The approved repository runner now builds this image after tests and can invoke
 the same deployment procedure with explicit dispatch settings. Default dispatch
 only validates/builds. Local model access is an explicit host path; there is no
-claim of GitHub-hosted access to this laptop. The extended GitHub run remains to
-be verified separately from the successful local container checks.
+claim of GitHub-hosted access to this laptop.
+
+GitHub run `38250748811` passed for commit
+`6cdbf6f2541becac00466e1507e263ffc5135db7`: fresh locked installation, pip consistency,
+compilation, all 22 tests in 84.781 seconds, CPU image build, and experimental
+version 1 deployment with matching readiness and a real prediction probe. The
+deployment receipt records a clean source tree and image ID
+`sha256:dadbbc1f347df05c25ade128314ab152fa75ec5351000158b781e28680582b90`.
+The once-only runner exited after success. The container remains available locally.
+Registry aliases are still empty. Original data metadata and DVC stages remain
+unchanged. `reports/phase7-validation.json` links the local and CI evidence.
 
 ## Delivery gates
 
@@ -505,6 +514,6 @@ documented scene-independence limitation. CUDA checks, smoke training, and the
 full Phase 4 baseline/evaluation passed. Phase 5 local tracking, registration,
 and retrieval are verified. Person detection remains a model-quality limitation
 before stable promotion. Phase 7 local container build and experimental deployment
-are verified. Still deferred: expanded CI evidence, later dependency resolution,
-and measured threshold calibration.
+and the expanded GitHub build/deployment are verified. Still deferred: stable
+model approval, later dependency resolution, and measured threshold calibration.
 These do not prevent the repository foundation from being completed.

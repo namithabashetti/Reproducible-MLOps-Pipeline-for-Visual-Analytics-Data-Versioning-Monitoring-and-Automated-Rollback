@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 7 local Docker/FastAPI serving verified; expanded CI verification in progress.**
+**Current status: Phase 7 Docker/FastAPI serving and real GitHub build/deployment passed.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; serving checks extend the earlier seventeen-test suite.
+Evidence: `reports/phase3-validation.json`; all 22 current tests passed in GitHub Actions.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -566,8 +566,8 @@ Evidence is in `reports/phase6-validation.json`, `reports/phase6-github-run.json
 and `reports/phase6-github-final.log`. Earlier failed attempts and their fixes
 remain documented. Tests use temporary fixtures without copying the raw dataset
 or live registry. All 10,000 original files retain their recorded metadata and
-DVC reports no changes. Container build/deployment and stable promotion remain
-separate, unfinished gates.
+DVC reports no changes. At the Phase 6 boundary, container build/deployment and
+stable promotion remained separate gates. Phase 7 below completes the serving work.
 
 Docker Desktop's Linux engine was unavailable during the Phase 6 check. This
 does not prevent these CI tests; start Docker Desktop and verify the engine
@@ -651,6 +651,24 @@ The final image ID identifies the actual deployment.
 The app uses FastAPI's [lifespan loading](https://fastapi.tiangolo.com/advanced/events/),
 Ultralytics' [prediction results](https://docs.ultralytics.com/modes/predict/), and
 Docker's [build-context and base-image guidance](https://docs.docker.com/build/building/best-practices/).
+
+Phase 7 verification passed on 2026-10-12 in
+[GitHub run 38250748811](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38250748811).
+Commit `6cdbf6f2541becac00466e1507e263ffc5135db7` passed a fresh dependency install,
+pip consistency, source compilation, all **22 tests in 84.781 seconds**, the real
+Docker build, and deployment with matching readiness and a prediction probe.
+The deployed receipt records a clean source checkout and image
+`sha256:dadbbc1f347df05c25ade128314ab152fa75ec5351000158b781e28680582b90`.
+The runner exited after the successful job; the local API remains running.
+
+Separate local checks verified seven detections on validation image
+`hard_hat_workers101`, input-size/type errors, concurrent predictions, restart
+readiness, refused startup with corrupted weights, and refused default deployment
+without a stable alias. All 46 Linux serving pins were checked inside the image.
+Dataset metadata and DVC stages remain unchanged. Evidence is in
+`reports/phase7-validation.json`, `reports/phase7-api-validation.json`, the GitHub
+run receipt/log, and `artifacts/serving/deployment.json`. Model quality has not been
+improved by serving it; stable promotion remains pending. Next is Phase 8 monitoring.
 
 ## Storage and credentials
 
@@ -851,7 +869,7 @@ GitHub Actions cannot deploy to this laptop without an execution mechanism. A
 repository-scoped local runner was approved and registered on 2026-10-11.
 GitHub validation has passed. Phase 7 extends the workflow to build the real CPU
 image and optionally deploy a selected local registry model. Local serving checks
-passed; the expanded GitHub run is recorded separately when complete.
+and the expanded GitHub run passed; see the Phase 7 evidence above.
 
 Proceed through data/DVC, preprocessing, training, MLflow, CI/CD, serving,
 operational monitoring, drift, health, rollback, and final validation incrementally.
@@ -869,7 +887,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-06 / FR-07 | CUDA smoke run, 30-epoch baseline, best-checkpoint metrics, source/data/checkpoint lineage | Training/evaluation complete; weak person class prevents treating this baseline as stable |
 | FR-08 / tracking acceptance | Local SQLite run, parameters, epoch/global/per-class metrics, artifacts, DVC/source identities | Verified |
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
-| FR-10 / AC-08 | Phase 6 GitHub validation; Phase 7 adds real build and optional deployment steps | Expanded CI verification in progress; stable promotion is separate |
+| FR-10 / AC-08 | GitHub run 38250748811: 22 tests, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 to FR-18 | Approved monitoring and calibration policies | Pending |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
