@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 6 runner registered; first GitHub validation pending.**
+**Current status: Phase 6 GitHub CI validation passed; Docker build/deployment await Phase 7.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -443,8 +443,8 @@ Manual dispatch on main -> runner/Python preflight -> checkout dispatched commit
 ```
 
 The user approved runner installation/registration on 2026-10-11. The official
-Windows x64 runner 2.338.0 is checksum-verified and registered to this repository;
-the first GitHub validation is pending. Docker build/deployment will extend this workflow
+Windows x64 runner 2.338.0 is checksum-verified and registered to this repository.
+GitHub validation passed on 2026-10-12. Docker build/deployment will extend this workflow
 after Phase 7 supplies the serving application, Dockerfile, and health checks.
 Until then, FR-10 / AC-08 are not complete; a source compilation check is not a
 container build. Stable model approval also remains pending.
@@ -519,9 +519,9 @@ The setup procedure is:
    and `_work` directory. Enter the one-hour registration token only in the local
    terminal. Decline Windows-service installation. Never paste the token in chat.
 4. Start `run.cmd` manually and verify this repository lists the runner as idle.
-5. Publish the reviewed project sources/workflow to `main`, after checking Git
-   exclusions and remote state. The read-only remote query on 2026-10-09 advertised
-   no HEAD/main/master refs; no publication has been performed in this phase.
+5. Publish reviewed project sources/workflow to `main`, after checking Git
+   exclusions and remote state. The initial publication was completed on
+   2026-10-11; dataset bytes, model artifacts and credentials remain excluded.
 6. Dispatch **Local validation** on `main`, verify all steps and commit/lock hashes
    in GitHub, then stop the runner with Ctrl+C when finished.
 
@@ -540,14 +540,26 @@ No Windows service was installed. For this validation the runner is started with
 `reports/phase6-runner-installation.json`; runner credentials remain in the
 separate runner directory and must never be committed or uploaded.
 
-Local preparation checks use the existing pinned environment in a separate
-source-only snapshot. They do not establish a clean dependency installation,
-runner registration, GitHub workflow execution, Docker build, or deployment.
-Evidence is in `reports/phase6-validation.json` and
-`reports/phase6-local-validation.log`. The workflow passes actionlint and native
-PowerShell parsing; the workspace rejection and native-command failure path were
-exercised. The existing seventeen tests run without copying the raw dataset or
-the real registry into that snapshot.
+Initial local preparation checks used the existing pinned environment in a
+separate source-only snapshot. Those checks alone did not prove GitHub execution.
+The workflow passes actionlint and PowerShell parsing; workspace rejection,
+native-command failure propagation, retry recovery/exhaustion, and summary output
+were checked locally.
+
+The real [successful GitHub run](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38212488144)
+validated commit `dac82c43d53ed9f08cb526a534f545082bda4468` on 2026-10-12.
+It passed fresh dependency installation, `pip check`, source compilation,
+**all 17 tests in 49.078 seconds**, and the final commit/lock summary. The job took
+6 minutes 33 seconds and needed no installation retry in that successful run.
+The one-job runner then exited; GitHub reports it offline and not busy. This is
+expected for a manually operated runner, not a Windows service failure.
+
+Evidence is in `reports/phase6-validation.json`, `reports/phase6-github-run.json`,
+and `reports/phase6-github-final.log`. Earlier failed attempts and their fixes
+remain documented. Tests use temporary fixtures without copying the raw dataset
+or live registry. All 10,000 original files retain their recorded metadata and
+DVC reports no changes. Container build/deployment and stable promotion remain
+separate, unfinished gates.
 
 Docker Desktop's Linux engine was unavailable during the Phase 6 check. This
 does not prevent these CI tests; start Docker Desktop and verify the engine
@@ -751,8 +763,8 @@ model, then checks readiness and successful predictions before claiming recovery
 Use the existing private GitHub repository and `main`. Actions is reported enabled.
 GitHub Actions cannot deploy to this laptop without an execution mechanism. A
 repository-scoped local runner was approved and registered on 2026-10-11.
-GitHub execution and Docker build/deployment remain unverified until their actual
-checks complete.
+GitHub validation has passed; Docker build/deployment remain unverified until
+the serving implementation and its actual checks are complete.
 
 Proceed through data/DVC, preprocessing, training, MLflow, CI/CD, serving,
 operational monitoring, drift, health, rollback, and final validation incrementally.
@@ -770,7 +782,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-06 / FR-07 | CUDA smoke run, 30-epoch baseline, best-checkpoint metrics, source/data/checkpoint lineage | Training/evaluation complete; weak person class prevents treating this baseline as stable |
 | FR-08 / tracking acceptance | Local SQLite run, parameters, epoch/global/per-class metrics, artifacts, DVC/source identities | Verified |
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
-| FR-10 / AC-08 | Manual local-runner validation workflow and registered runner | First GitHub execution pending; build/deployment await serving |
+| FR-10 / AC-08 | Successful GitHub run with fresh dependencies, compilation, 17 tests and summary | CI validation verified; full build/deployment await serving |
 | FR-11 / FR-12 | Approved Docker/FastAPI local serving design | Pending Phase 7 |
 | FR-13 to FR-18 | Approved monitoring and calibration policies | Pending |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |

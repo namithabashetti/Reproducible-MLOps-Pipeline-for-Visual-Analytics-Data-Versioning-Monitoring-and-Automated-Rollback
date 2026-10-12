@@ -418,6 +418,25 @@ now permits at most three attempts, logging failures and waiting five seconds
 between attempts. Exhaustion fails the job; no TLS validation bypass or package
 version change was introduced.
 
+### GitHub CI validation passed — 2026-10-12
+
+Run `38212488144` succeeded for commit
+`dac82c43d53ed9f08cb526a534f545082bda4468`. The real repository-scoped Windows
+runner checked out that commit, installed dependencies into a fresh temporary
+environment, passed `pip check`, compiled the sources, passed all 17 tests in
+49.078 seconds, and wrote the validation summary. The complete job took 6 minutes
+33 seconds; installation succeeded on its first attempt in this run. The runner
+exited after the job and GitHub confirmed it offline/not busy. No Windows service
+or startup task was installed.
+
+The original dataset metadata remains unchanged for all 10,000 files and DVC
+status is clean. No training, dataset transfer, model promotion or deployment
+was performed by CI. `reports/phase6-validation.json` records both the successful
+run and previous failures; the full successful log is retained locally.
+FR-10 / AC-08 have real CI validation evidence, but their complete build/deployment
+acceptance remains dependent on Phase 7's Docker/FastAPI implementation. This
+phase does not establish an approved stable model or a usable rollback target.
+
 ## Health decisions and rollback
 
 PSI/KS are evidence sources, not rollback commands. The approved policy combines
@@ -449,5 +468,5 @@ documented scene-independence limitation. CUDA checks, smoke training, and the
 full Phase 4 baseline/evaluation passed. Phase 5 local tracking, registration,
 and retrieval are verified. Person detection remains a model-quality limitation
 before stable promotion. Still deferred: later dependency resolution,
-verified CI execution/container deployment, and measured threshold calibration.
+verified container build/deployment, and measured threshold calibration.
 These do not prevent the repository foundation from being completed.
