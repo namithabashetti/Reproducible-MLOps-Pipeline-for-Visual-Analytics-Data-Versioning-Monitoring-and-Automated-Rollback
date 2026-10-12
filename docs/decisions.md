@@ -410,6 +410,13 @@ PowerShell session. The summary now uses the already-required Python standard
 library. It was verified from the actual long checkout and with an empty
 PowerShell module path. The next run also skips dependency bytecode precompilation
 because its environment is temporary; project compilation remains a separate step.
+On 2026-10-12, two attempts of run `38211578040` hit intermittent TLS record
+errors fetching different PyPI indexes (`pydantic-core`, then `wrapt`). The same
+pins had installed successfully in the earlier run. A verified HTTPS request
+also confirmed the pinned pydantic-core release was available. The install step
+now permits at most three attempts, logging failures and waiting five seconds
+between attempts. Exhaustion fails the job; no TLS validation bypass or package
+version change was introduced.
 
 ## Health decisions and rollback
 

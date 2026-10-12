@@ -495,6 +495,10 @@ Dependency installation skips ahead-of-time bytecode compilation in this
 temporary environment; the separate compile step still checks project sources.
 The job summary uses Python's standard library for hashing and UTF-8 output,
 so it does not depend on PowerShell module discovery in the runner session.
+Installation gets at most three attempts, with a five-second delay, to tolerate
+intermittent package-index TLS transport failures observed on this laptop. Each
+failed attempt is logged; exhausted retries fail the job. TLS verification and
+all package pins remain unchanged.
 
 **Security implication:** repository workflow code runs with the Windows account's
 permissions, including access to files, OAuth tokens, and Docker that the account
