@@ -491,6 +491,10 @@ added. No machine-wide Git configuration or Windows registry setting was changed
 Python's virtual-environment executable also exceeded the Windows launch path
 limit inside that checkout. CI therefore creates its environment under the shorter
 `RUNNER_TEMP\venv` path; the runner cleans its temporary directory between jobs.
+Dependency installation skips ahead-of-time bytecode compilation in this
+temporary environment; the separate compile step still checks project sources.
+The job summary uses Python's standard library for hashing and UTF-8 output,
+so it does not depend on PowerShell module discovery in the runner session.
 
 **Security implication:** repository workflow code runs with the Windows account's
 permissions, including access to files, OAuth tokens, and Docker that the account

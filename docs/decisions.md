@@ -403,6 +403,13 @@ The second attempt passed checkout but could not launch the virtual-environment
 Python executable under that same long directory. CI now builds its fresh Python
 environment in `RUNNER_TEMP\venv`, outside the long repository path. This is a
 job-temporary environment, not reuse of the development virtual environment.
+Run `38143054792` then installed all locked dependencies successfully, passed
+`pip check`, compiled sources, and passed all 17 tests in 59.295 seconds. Its
+summary step failed because `Get-FileHash` was unavailable in the runner's
+PowerShell session. The summary now uses the already-required Python standard
+library. It was verified from the actual long checkout and with an empty
+PowerShell module path. The next run also skips dependency bytecode precompilation
+because its environment is temporary; project compilation remains a separate step.
 
 ## Health decisions and rollback
 

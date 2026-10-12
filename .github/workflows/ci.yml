@@ -52,7 +52,7 @@ jobs:
         run: |
           py -3.11 -m venv "$env:RUNNER_TEMP\venv"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
-          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip install --no-input -r requirements-lock.txt
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip install --no-input --no-compile -r requirements-lock.txt
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m pip check
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
@@ -69,13 +69,22 @@ jobs:
 
       - name: Record validation scope
         run: |
-          $lockHash = (Get-FileHash -LiteralPath requirements-lock.txt -Algorithm SHA256).Hash.ToLowerInvariant()
-          @"
+          @'
+          import hashlib
+          import os
+          from pathlib import Path
+
+          lock_hash = hashlib.sha256(Path("requirements-lock.txt").read_bytes()).hexdigest()
+          summary = f"""
           ## Local validation passed
-          Commit: $env:GITHUB_SHA
-          Dependency lock SHA-256: $lockHash
+          Commit: {os.environ["GITHUB_SHA"]}
+          Dependency lock SHA-256: {lock_hash}
           Python: 3.11.9 / Windows
           Source compilation, dependency consistency and isolated tests passed.
           Docker build and deployment await the Phase 7 serving implementation.
           This run does not train, transfer the dataset, or promote a model.
-          "@ | Out-File -LiteralPath $env:GITHUB_STEP_SUMMARY -Encoding utf8 -Append
+          """
+          with open(os.environ["GITHUB_STEP_SUMMARY"], "a", encoding="utf-8") as output:
+              output.write(summary)
+          '@ | & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
