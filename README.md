@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 8 Prometheus/Grafana monitoring and updated GitHub CI/deployment passed.**
+**Current status: Phase 9 local Evidently PSI/KS reports and 29 local tests passed; final validation is in progress.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 23 current tests passed locally and in GitHub Actions.
+Evidence: `reports/phase3-validation.json`; all 29 current tests passed locally.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -18,7 +18,7 @@ Best-checkpoint validation mAP50 is 61.94%, but person detection is weak
 (1.94% per-class mAP50). This is an experimental baseline, not an approved stable
 model. MLflow now records this baseline as `hard-hat-detector` version 1.
 Local tracking, experimental CPU serving, and operational monitoring are verified.
-Drift, health decisions, and rollback remain future work. Neither `stable`
+Local drift reporting is implemented; health decisions and rollback remain future work. Neither `stable`
 nor `previous_stable` has been assigned.
 
 ## Approved lifecycle
@@ -1002,7 +1002,8 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-10 / AC-08 | GitHub run 38518901297: 23 tests, monitoring config validation, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
-| FR-15 to FR-18 | Approved drift and calibration policies | Pending |
+| FR-15 / FR-16 | Real 250/250 API replay, Evidently HTML/JSON, PSI/KS summary and exclusion/freshness tests | Local drift evidence verified; continuous arbitrary-traffic capture is not implemented |
+| FR-17 / FR-18 | Approved combined health and drift-only exclusion policy | Health implementation pending |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
 
 `tests/test_data_validation.py` checks the validation contract using valid and
@@ -1023,3 +1024,57 @@ evidence in `reports/phase5-validation.json`. The serving tests add request/stat
 coordinate, corruption and approval checks; the tracking tests also exercise
 staging from a real temporary registry. Real container predictions are recorded
 separately in `reports/phase7-api-validation.json`.
+
+## Phase 9: local Evidently drift reports
+
+`src/monitoring/drift.py` compares the three approved input/output features with
+PSI and KS. It records sample availability, empty-prediction rates, immutable
+baseline identities, exact PSI edges, thresholds, and observation timestamps.
+The API now returns an inference-settings fingerprint with each prediction so
+collection cannot silently mix settings. The fixed measurement and freshness
+contract is in [the decision record](docs/decisions.md#phase-9-fixed-drift-measurement-contract).
+These reports supply evidence for Phase 10; they contain no health or rollback action.
+
+With the local API running, create new, uniquely named outputs:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.monitoring.drift collect --pool reference --output artifacts/monitoring/demo/reference.json
+.\.venv\Scripts\python.exe -m src.monitoring.drift collect --pool current --output artifacts/monitoring/demo/current.json
+.\.venv\Scripts\python.exe -m src.monitoring.drift report --reference artifacts/monitoring/demo/reference.json --current artifacts/monitoring/demo/current.json --output reports/drift-demo
+```
+
+Collection sends only the reserved monitoring images to localhost and preserves
+raw data. These commands replay a controlled batch, not continuous capture of
+arbitrary production requests. A failed request aborts collection. Existing files
+are never overwritten. Reuse a reference only with the same model, settings,
+data/split and feature identities. Current observations expire one hour after
+collection starts; a saved report is historical evidence after that deadline.
+Do not repeatedly replay the same pool and call those independent samples.
+
+Open `reports/drift-demo/evidently.html` for eligible feature charts and
+`summary.json` for the complete availability/identity/statistics record. Evidently
+also exports JSON. Empty predictions are excluded from confidence distributions
+and reported separately. Missing, stale, overlapping, or incompatible populations
+do not become a healthy measurement. Confidence changes do not measure accuracy.
+The initial thresholds remain calibration policies, not established guarantees.
+
+Files for this phase: `src/monitoring/drift.py`, `tests/test_drift.py`, the prediction
+fingerprint in `src/serving/api.py` and its serving test, drift parameters in
+`configs/config.yaml`, dependency manifests, reproduced `dvc.lock`, and these docs.
+No monitoring UI service or new cloud dependency is deployed.
+
+Phase 9 local execution on 2026-10-14 produced 250 reference and 250 current
+observations from experimental version 1. Brightness/sharpness/confidence PSI
+values were 0.048254 / 0.138301 / 0.078897; KS statistics were 0.080000 /
+0.072000 / 0.080691 and p-values 0.401123 / 0.536945 / 0.368641. No configured
+PSI/KS threshold was crossed. Reference confidence used 249 images (one empty
+prediction); current confidence used all 250. These are historical controlled
+batch results, not evidence of current service health or accuracy.
+
+All 29 local tests passed, including six drift tests. Tests cover unchanged and
+shifted distributions, constant reference tails, empty predictions, insufficient
+samples, stale/overlapping/incompatible evidence, corrupt values, changed serving
+settings, and real Evidently export with matching scores. Actual batch artifacts
+are in `artifacts/monitoring/phase9/`; HTML, JSON and the complete summary are in
+`reports/phase9-drift/`. HTML file generation and JSON contents were verified;
+visual browser review has not been performed.

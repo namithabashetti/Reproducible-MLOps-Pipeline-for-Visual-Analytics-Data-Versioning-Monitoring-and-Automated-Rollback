@@ -1,6 +1,7 @@
 """API contracts and deployment gates; real checkpoint inference is a separate container check."""
 
 from io import BytesIO
+import hashlib
 import json
 from pathlib import Path
 import tempfile
@@ -84,6 +85,8 @@ class ServingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(code, 200)
                 self.assertEqual((result["width"], result["height"], result["detections"]), (4, 5, []))
                 self.assertEqual(result["deployment_mode"], "experimental")
+                self.assertEqual(result["inference_sha256"], hashlib.sha256(
+                    json.dumps(manifest["inference"], sort_keys=True).encode()).hexdigest())
                 inference.side_effect = RuntimeError("fixture failure")
                 with self.assertLogs("src.serving.api", level="ERROR"):
                     code, result = await request("POST", "/predict", image.getvalue())

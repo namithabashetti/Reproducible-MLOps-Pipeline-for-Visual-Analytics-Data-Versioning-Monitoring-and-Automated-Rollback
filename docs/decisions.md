@@ -200,9 +200,10 @@ the charger and Windows confirmed AC power before the training gate.
 
 Phase 2 installed DVC 3.67.1, dvc-s3 3.3.0, dvc-gdrive 3.0.1, and Pillow 10.2.0 alongside PyYAML
 6.0.3. `requirements-lock.txt` records this Windows/Python 3.11 environment.
-MLflow 3.16.1 was installed and verified in Phase 5. Evidently 0.7.23 remains a
-candidate for its later phase; the monitoring stack has not been installed or
-tested together. Add dependencies only in the relevant phase.
+MLflow 3.16.1 was installed and verified in Phase 5. Phase 9 selects Evidently
+0.7.23 for local reports. Its resolved dependencies are pinned in the Windows
+lock; the CPU serving environment does not need Evidently. Add dependencies only
+in the relevant phase.
 
 MLflow uses local SQLite metadata and local artifacts. SQLite is an embedded
 metadata file, not a new database service. Compose is approved for the real local
@@ -564,3 +565,68 @@ and the expanded GitHub build/deployment are verified. Phase 8 operational
 monitoring, persistence, outage/recovery and updated CI also passed. Still deferred: stable
 model approval, later dependency resolution, and measured threshold calibration.
 These do not prevent the repository foundation from being completed.
+
+## Phase 9: fixed drift measurement contract
+
+`src/monitoring/drift.py` collects controlled replays of the reserved 250-image
+reference/current pools through the real localhost prediction API. It reads raw
+images without writing to the dataset. These are sampled demonstration observations,
+not a claim of continuous production traffic capture. Labels and the final-test
+pool are not used. HTTP failures abort collection instead of becoming empty detections.
+
+Before comparison/calibration, the following definitions were fixed:
+
+- Brightness: mean OpenCV uint8 grayscale intensity (0..255) on the EXIF-oriented
+  decoded image at original resolution, before serving resize/padding.
+- Sharpness: natural `log1p` of the population variance of OpenCV's float64
+  Laplacian (`ksize=1`, default reflected border) on that grayscale image.
+- Output: maximum retained detection confidence after configured confidence/NMS
+  filtering; an empty prediction is null and excluded only from this comparison.
+  Empty-image counts and rates remain separately visible for both populations.
+- PSI: ten nominal reference quantile intervals with duplicate edges collapsed,
+  explicit infinite tail bins, and `nextafter(reference_max, +inf)` to retain the
+  maximum in a finite bin (including constant references). Add 0.5 to each bin
+  count in both populations, then normalize and sum `(current-reference) *
+  ln(current/reference)`. Record every actual edge. Current data never chooses bins.
+- KS: SciPy two-sided `ks_2samp(method="auto")`; require both p < 0.01/3 and
+  statistic >= 0.10. Ties and related images limit the ideal independent continuous
+  sample interpretation; these initial calibration thresholds do not prove accuracy.
+- Require 200 non-null samples in each population for each feature. A positive
+  available feature supplies drift evidence; otherwise missing features leave
+  overall evidence unknown instead of silently returning no drift.
+- Current population's oldest observation must be at most 3,600 seconds old and
+  its collection span at most 1,800 seconds. Reference must finish before current
+  starts. The immutable reference remains reusable while its model/checkpoint,
+  inference settings, raw/split identities, feature definition and OpenCV version
+  match. It is a fixed baseline, not a live health measurement. `current_valid_until`
+  must be checked again by a future health consumer; historical reports stay historical.
+
+These freshness/binning choices are initial demonstration settings, fixed before
+viewing these pools' results; the previously approved PSI/KS thresholds are unchanged.
+Both IDs and image-byte hashes are checked for cross-population overlap. Each
+successful API response includes its inference-settings SHA-256; collection checks
+that and the model/version/checkpoint to prevent mixing prediction baselines.
+Invalid/non-finite/duplicate observations are rejected. Stale, insufficient, or
+incompatible evidence is explicitly unavailable. Empty predictions are never zero
+confidence, and confidence changes are never labeled accuracy degradation.
+
+Evidently uses registered custom PSI/KS statistical tests to apply this exact
+contract, rather than its automatic test selection/default bins. Reports export
+local HTML and JSON plus a machine-readable summary with observation hashes,
+identities, windows, package versions, thresholds, counts, scores, and reasons.
+Unavailable columns are omitted from Evidently charts and listed in the summary;
+an entirely unavailable comparison has no statistical chart. Existing output
+paths are preserved. No Evidently cloud service, scheduler, additional endpoint,
+health classifier, or rollback action is introduced.
+
+References: [Evidently drift customization](https://docs.evidentlyai.com/metrics/customize_data_drift),
+[Evidently 0.7.23](https://pypi.org/project/evidently/0.7.23/).
+
+The dependency resolver added Evidently and its required packages without changing
+any existing pinned package version; `pip check` passed. Both DVC stages were
+actually reproduced after the lock change. Raw content SHA-256 remained
+`15b3504dac4555eafbfcfb752ae642a323da03217311c4685f36acaa2c21d401`,
+and processed content SHA-256 remained
+`25a92d0c07b880d45be6db7bf5a46e705fb675d8cdaa22207b25ab8fe3c26ed6`.
+Split and processed DVC output hashes are unchanged; only dependency-lock metadata
+changed in `dvc.lock`. Raw file sizes/modification times remain unchanged.

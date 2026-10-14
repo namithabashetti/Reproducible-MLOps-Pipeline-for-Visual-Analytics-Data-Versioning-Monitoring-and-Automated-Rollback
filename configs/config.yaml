@@ -51,6 +51,10 @@ drift:
   ks_family_alpha: 0.01
   ks_comparisons: 3
   ks_min_statistic: 0.10
+  psi_bins: 10
+  psi_pseudocount: 0.5
+  current_max_age_seconds: 3600
+  current_max_span_seconds: 1800
 
 health:
   policy_status: initial_calibration

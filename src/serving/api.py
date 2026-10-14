@@ -173,5 +173,6 @@ async def predict(request: Request):
     return {"model_name": state.manifest["model_name"],
             "model_version": state.manifest["model_version"],
             "checkpoint_sha256": state.manifest["checkpoint_sha256"],
+            "inference_sha256": hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest(),
             "deployment_mode": state.manifest["deployment_mode"],
             "width": image.shape[1], "height": image.shape[0], "detections": detections}
