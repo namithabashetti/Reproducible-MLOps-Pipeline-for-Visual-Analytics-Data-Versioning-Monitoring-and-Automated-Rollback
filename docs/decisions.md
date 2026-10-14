@@ -640,3 +640,90 @@ decision and rollback phases remain unimplemented; registry stable aliases remai
 unassigned. Reopening the session later found Docker stopped; the same existing
 containers were restarted for the handoff. This does not refresh historical drift
 observations or enable automatic service startup.
+
+## Phase 10: host-side health decisions
+
+`src/monitoring/health.py` combines direct readiness probes, exact Prometheus
+counter/histogram differences, a measured latency baseline, labeled audit results,
+and Phase 9 drift summaries. It emits `healthy`, `unhealthy`, or `unknown` with
+per-signal reasons, deployment/model identity and a short validity deadline. It
+never changes a model, registry alias or container. Readiness failures can be
+evaluated while the API is down because the checker runs on the Windows host.
+
+The implementation fixes the following initial calibration choices before the
+live checks. Existing approved numeric breach thresholds remain unchanged:
+
+- Readiness: three direct probes spaced at least ten seconds apart. Require three
+  consecutive failures after the 60-second startup grace to declare a service
+  breach. A successful latest probe resets that failure sequence. The actual
+  Docker container start time identifies restarts; changed starts discard earlier
+  probes. Unknown runtime start makes failure evidence unavailable. A stopped or
+  unavailable Docker daemon does not crash the checker or imply healthy service.
+- Operational evidence: the two latest completed UTC-aligned 120-second windows.
+  For each nominal boundary use the latest real scrape at/before that boundary,
+  within 15 seconds. Adjacent windows share a boundary sample, never an increment.
+  Require continuous successful scrapes with gaps <=15 seconds, matching counter
+  and histogram timestamps, no decreasing counters or changed creation times,
+  and data from the current container process. Missing/ambiguous series, restarts,
+  scrape gaps, and fewer than 100 eligible predictions per window are unavailable.
+- Eligible traffic is success + server error. Client errors are excluded from
+  both error-rate and latency denominators. Exact differences avoid extrapolated
+  `increase` counts. Cumulative histogram differences provide an interpolated
+  p95; an overflowing +Inf quantile is unavailable, not a fabricated finite value.
+- Error >=5% in both qualifying windows or p95 above `max(2 seconds, 2*baseline)`
+  in both windows is unhealthy. A single critical breach window remains pending
+  (`unknown`) until sufficient persistence is observed.
+- The latency baseline captures the larger p95 of two qualifying, error-free
+  windows at or below the two-second floor. It records CPU/host and inference settings,
+  source model and window counts. It expires after 24 hours and must match the
+  current host/CPU and inference settings. This is operational calibration and
+  does not approve experimental model quality or create a stable alias.
+- Labeled audit: require an actual registered `stable` baseline and the deployed
+  candidate, both on the same >=200-image labeled monitoring batch. Reject stale
+  (>1 hour), incompatible, non-finite, or mismatched-batch evidence. An absolute
+  mAP50-95 drop >=0.05 is unhealthy (1e-12 arithmetic comparison tolerance).
+- Fresh positive drift plus >=2% server errors in both qualifying windows is
+  unhealthy only when the drift current-population interval overlaps the latest
+  operational window. Recheck drift identity, split, policy and expiry. Positive
+  partial drift can support this combined breach; incomplete drift alone leaves
+  evidence unknown. Drift by itself never makes the deployment unhealthy.
+- Any confirmed breach wins over missing independent signals. Otherwise every
+  required signal must be available to declare healthy. Missing stable quality
+  evidence therefore remains unknown even when serving and latency look normal.
+  Malformed optional evidence is unavailable; it cannot erase an independently
+  confirmed readiness failure. Repeated checks of the same windows do not create
+  additional persistence observations.
+
+Decision validity is bounded by the latest probe's 15-second freshness and the
+shortest applicable evidence expiry. Historical JSON is not a current health
+measurement. A future rollback consumer must check identity and freshness again.
+The CLI is a bounded check, not an installed background service or scheduler.
+
+`src/monitoring/audit.py` resolves verified MLflow checkpoints through the existing
+staging procedure. With an approved stable alias, it first checks DVC status, then
+copies only monitoring-current images/labels to a new audit directory. Both models
+use identical isolated inputs and explicit CPU AP-evaluation settings: 416 pixels,
+batch 4, confidence .001, IoU .7, max 300 detections, no augmentation/half precision.
+The low confidence is for offline AP evaluation, not a serving configuration change.
+Copied-input hashes protect labels and pixels from evaluator cache writes or repairs.
+The report records both checkpoint identities, batch hash, settings and real
+mAP50-95 values. When stable is absent, it writes an unavailable result without
+inventing a reference or changing aliases. Current v1 remains experimental.
+
+No new package, API endpoint, cloud transfer, training run, or rollback mechanism
+is introduced. The new configuration values are in `health`, outside the DVC
+stage parameter dependencies. See [Prometheus HTTP range vectors](https://prometheus.io/docs/prometheus/latest/querying/api/)
+for the raw-sample API used by the checker.
+
+Phase 10 local validation passed 39 tests. The real two-window test measured
+110/250 eligible requests, excluded three client errors, and captured baseline
+p95 0.089151 seconds. Normal operation returned unknown only for missing stable
+quality evidence; a real stopped API returned unhealthy after three failures.
+Restart restored readiness and made pre-restart windows unavailable. No model
+switch occurred. An approved stable comparison is still unavailable; fixtures
+exercise its implementation and input isolation without claiming real quality
+results. Evidence: `reports/phase10-validation.json` and `reports/phase10-live/`.
+DVC status and original file metadata are unchanged; no dependency or serving API
+code change required rebuilding data or replacing the serving image. GitHub
+validation for this phase will use deployment `none` and still run the existing
+locked-environment tests, monitoring checks and Docker build.

@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 9 Evidently PSI/KS reports, 29 tests, and GitHub CI/deployment passed.**
+**Current status: Phase 10 health decisions, 39 local tests, and live failure/recovery checks passed; GitHub validation is pending.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 29 current tests passed locally and in GitHub Actions.
+Evidence: `reports/phase3-validation.json`; all 39 current tests passed locally.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -18,7 +18,7 @@ Best-checkpoint validation mAP50 is 61.94%, but person detection is weak
 (1.94% per-class mAP50). This is an experimental baseline, not an approved stable
 model. MLflow now records this baseline as `hard-hat-detector` version 1.
 Local tracking, experimental CPU serving, and operational monitoring are verified.
-Local drift reporting is implemented; health decisions and rollback remain future work. Neither `stable`
+Local drift reporting and health decisions are implemented; rollback remains future work. Neither `stable`
 nor `previous_stable` has been assigned.
 
 ## Approved lifecycle
@@ -1003,7 +1003,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
 | FR-15 / FR-16 | Real 250/250 API replay, Evidently HTML/JSON, PSI/KS summary and exclusion/freshness tests | Local drift evidence verified; continuous arbitrary-traffic capture is not implemented |
-| FR-17 / FR-18 | Approved combined health and drift-only exclusion policy | Health implementation pending |
+| FR-17 / FR-18 | Decision matrix, exact traffic windows, live readiness outage/recovery and drift-only exclusion | Implemented; real comparative labeled quality remains unavailable until a stable baseline is approved |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
 
 `tests/test_data_validation.py` checks the validation contract using valid and
@@ -1088,3 +1088,57 @@ content and modification times were preserved. Detailed evidence and the file
 inventory are in `reports/phase9-validation.json`. The following documentation-only
 commit records those results. Next is Phase 10: combine service, operational,
 labeled-quality and drift evidence in the separate health decision layer.
+
+## Phase 10: combined health decision
+
+The host-side checker combines readiness, traffic errors, latency, labeled
+mAP50-95 audit evidence and fresh drift reports. It records a decision and reasons;
+rollback execution belongs to Phase 11. Run a bounded check with new output paths:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.monitoring.audit --output artifacts/monitoring/audit-demo
+.\.venv\Scripts\python.exe -m src.monitoring.health latency-baseline --output artifacts/monitoring/latency-demo.json
+.\.venv\Scripts\python.exe -m src.monitoring.health check --drift reports/phase10-drift/summary.json --audit artifacts/monitoring/audit-demo/audit.json --latency-baseline artifacts/monitoring/latency-demo.json --output reports/health-demo.json
+```
+
+Latency calibration needs two completed two-minute windows with >=100 successful
+predictions each, zero server errors, and p95 at most two seconds. Ordinary idle
+traffic cannot supply that baseline. Client errors are excluded. A check takes
+about 20 seconds for three readiness observations and reads the last two completed
+traffic windows. It can report a real readiness failure even when prediction is
+unavailable. Existing output files are preserved.
+
+`healthy` requires complete fresh evidence with no breach. `unhealthy` requires a
+confirmed configured breach. `unknown` identifies missing, stale, incompatible,
+insufficient, or pending evidence. Drift alone cannot produce unhealthy. The model
+currently lacks an approved stable reference, so the real labeled audit returns
+unavailable and an otherwise normal deployment remains unknown for overall health.
+The final-test pool is excluded. Full rules, timestamps, restart handling and
+measurement definitions are in [the decision record](docs/decisions.md#phase-10-host-side-health-decisions).
+
+Files: `src/monitoring/health.py` collects and evaluates evidence;
+`src/monitoring/audit.py` prepares identical isolated labeled inputs for verified
+checkpoints; `tests/test_health.py` covers decisions and measurement boundaries;
+`configs/config.yaml` fixes window/freshness parameters. No package changes were
+needed. Output includes the evidence used, deployment identity, reasons and a short
+`valid_until`; a saved healthy report must not be reused after that deadline.
+
+Phase 10 local validation passed 39 tests in 48.236 seconds. A real integration
+used two qualifying windows with 110 and 250 successful predictions; three client
+errors were excluded from the first denominator. The measured baseline p95 was
+0.089151 seconds, making the initial latency limit two seconds. A new current-pool
+replay produced fresh drift evidence against the preserved Phase 9 reference.
+With those measured signals, the normal decision was unknown solely because no
+approved stable quality baseline exists. Stopping the API produced three real
+readiness failures and an unhealthy decision while the host checker kept running.
+Restarting the same container restored readiness and invalidated old traffic
+windows. No model switch or alias update occurred. The standalone CLI also passed
+and correctly reported unknown with nonqualifying post-restart windows.
+
+`reports/phase10-live/` preserves normal/outage/recovery evidence;
+`reports/phase10-validation.json` records the phase checks and file inventory.
+`reports/phase10-drift/` contains the fresh distribution report. The full decision
+matrix and available audit path use controlled fixtures; they do not establish a
+real stable-versus-candidate quality comparison. No approved stable model was
+invented. DVC status is unchanged, and all 10,000 original file sizes/modification
+times match the preserved dataset metadata.

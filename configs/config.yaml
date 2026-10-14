@@ -69,6 +69,11 @@ health:
   labeled_audit_min_images: 200
   map50_95_absolute_drop_threshold: 0.05
   drift_and_server_error_rate_threshold: 0.02
+  window_seconds: 120
+  max_scrape_gap_seconds: 15
+  readiness_max_age_seconds: 15
+  audit_max_age_seconds: 3600
+  latency_baseline_max_age_seconds: 86400
 
 rollback:
   stable_alias: stable
