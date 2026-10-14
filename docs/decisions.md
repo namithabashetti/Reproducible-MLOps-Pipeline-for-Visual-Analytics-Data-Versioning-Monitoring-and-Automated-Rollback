@@ -534,7 +534,15 @@ their output hashes stayed identical; only dependency hashes in dvc.lock changed
 Raw inputs were preserved. No retraining, model promotion, drift computation,
 overall health classification or automated rollback was performed. The isolated
 500-metric test uses mocked inference; the production demo fault remains off.
-Updated CI configuration validation/build/deployment will be verified separately.
+GitHub run `38518901297` passed for commit
+`27ea7e337e41ab150db59a1e16de154e8deade1d`: fresh dependencies, compilation,
+23 tests in 104.347 seconds, Compose/promtool checks, image build, and verified
+experimental deployment. Prometheus picked up the replacement API automatically.
+The runner exited after the job; the three local services remain running.
+The dashboard-only follow-up adds explicit label-to-column transforms to its
+two tables; their provisioned definitions and incoming labels were checked via
+Grafana's API. It does not modify the CI-tested serving image. Evidence is in
+`reports/phase8-validation.json` and the associated integration/GitHub reports.
 
 ## Delivery gates
 
@@ -552,6 +560,7 @@ documented scene-independence limitation. CUDA checks, smoke training, and the
 full Phase 4 baseline/evaluation passed. Phase 5 local tracking, registration,
 and retrieval are verified. Person detection remains a model-quality limitation
 before stable promotion. Phase 7 local container build and experimental deployment
-and the expanded GitHub build/deployment are verified. Still deferred: stable
+and the expanded GitHub build/deployment are verified. Phase 8 operational
+monitoring, persistence, outage/recovery and updated CI also passed. Still deferred: stable
 model approval, later dependency resolution, and measured threshold calibration.
 These do not prevent the repository foundation from being completed.

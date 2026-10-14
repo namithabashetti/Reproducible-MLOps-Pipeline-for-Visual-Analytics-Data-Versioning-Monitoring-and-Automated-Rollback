@@ -2,7 +2,7 @@
   "uid": "visual-analytics-operations",
   "title": "Visual analytics \u2014 Operations",
   "schemaVersion": 41,
-  "version": 1,
+  "version": 2,
   "editable": false,
   "tags": [
     "visual-analytics",
@@ -183,6 +183,12 @@
       },
       "transformations": [
         {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
@@ -192,7 +198,8 @@
               "job": true,
               "Value": true,
               "checkpoint_sha256": true,
-              "inference_sha256": true
+              "inference_sha256": true,
+              "va_model_info": true
             },
             "indexByName": {
               "model_name": 0,
@@ -250,6 +257,12 @@
       },
       "transformations": [
         {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
           "id": "organize",
           "options": {
             "excludeByName": {
@@ -257,6 +270,10 @@
               "__name__": true,
               "instance": true,
               "job": true
+            },
+            "renameByName": {
+              "va_prediction_requests_total": "Requests",
+              "Value": "Requests"
             }
           }
         }

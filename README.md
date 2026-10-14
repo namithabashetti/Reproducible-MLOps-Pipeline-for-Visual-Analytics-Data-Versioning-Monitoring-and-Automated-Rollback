@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 8 local Prometheus/Grafana integration passed; updated CI verification is pending.**
+**Current status: Phase 8 Prometheus/Grafana monitoring and updated GitHub CI/deployment passed.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 23 current tests passed locally.
+Evidence: `reports/phase3-validation.json`; all 23 current tests passed locally and in GitHub Actions.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -759,7 +759,18 @@ verified through Grafana's API. Evidence: `reports/phase8-integration.json`.
 Adding the client changed the Windows dependency lock, so both DVC stages were
 actually rerun. Split and processed-output hashes stayed identical; only the lock
 dependency hash changed. The original dataset remains unchanged. CI also validates
-Compose and runs `promtool check config` before building; its updated run is pending.
+Compose and runs `promtool check config` before building.
+
+[GitHub run 38518901297](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38518901297)
+passed on 2026-10-14 for commit `27ea7e337e41ab150db59a1e16de154e8deade1d`:
+fresh dependencies, compilation, **23 tests in 104.347 seconds**, Compose/promtool
+validation, image build and deployment with readiness/prediction checks. Prometheus
+automatically collected the replacement container's deployment ID. The once-only
+runner exited; API, Prometheus and Grafana remain running locally. The two table
+panels also have explicit label-to-column transforms, verified after provisioning
+through the dashboard definition and incoming dataframe labels. That dashboard-only
+follow-up does not change the CI-tested API image. Full evidence and file lists:
+`reports/phase8-validation.json`. Next is Phase 9, Evidently with PSI/KS drift evidence.
 
 Implementation follows the official [Prometheus client metric types](https://prometheus.github.io/client_python/instrumenting/),
 [histogram guidance](https://prometheus.github.io/client_python/instrumenting/histogram/),
@@ -988,7 +999,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-06 / FR-07 | CUDA smoke run, 30-epoch baseline, best-checkpoint metrics, source/data/checkpoint lineage | Training/evaluation complete; weak person class prevents treating this baseline as stable |
 | FR-08 / tracking acceptance | Local SQLite run, parameters, epoch/global/per-class metrics, artifacts, DVC/source identities | Verified |
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
-| FR-10 / AC-08 | GitHub run 38250748811: 22 tests, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
+| FR-10 / AC-08 | GitHub run 38518901297: 23 tests, monitoring config validation, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
 | FR-15 to FR-18 | Approved drift and calibration policies | Pending |
