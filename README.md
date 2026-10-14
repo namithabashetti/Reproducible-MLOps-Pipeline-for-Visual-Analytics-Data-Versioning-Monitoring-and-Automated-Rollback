@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 9 local Evidently PSI/KS reports and 29 local tests passed; final validation is in progress.**
+**Current status: Phase 9 Evidently PSI/KS reports, 29 tests, and GitHub CI/deployment passed.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 29 current tests passed locally.
+Evidence: `reports/phase3-validation.json`; all 29 current tests passed locally and in GitHub Actions.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -999,7 +999,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-06 / FR-07 | CUDA smoke run, 30-epoch baseline, best-checkpoint metrics, source/data/checkpoint lineage | Training/evaluation complete; weak person class prevents treating this baseline as stable |
 | FR-08 / tracking acceptance | Local SQLite run, parameters, epoch/global/per-class metrics, artifacts, DVC/source identities | Verified |
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
-| FR-10 / AC-08 | GitHub run 38518901297: 23 tests, monitoring config validation, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
+| FR-10 / AC-08 | GitHub run 38560936350: 29 tests, monitoring config validation, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
 | FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
 | FR-15 / FR-16 | Real 250/250 API replay, Evidently HTML/JSON, PSI/KS summary and exclusion/freshness tests | Local drift evidence verified; continuous arbitrary-traffic capture is not implemented |
@@ -1078,3 +1078,13 @@ settings, and real Evidently export with matching scores. Actual batch artifacts
 are in `artifacts/monitoring/phase9/`; HTML, JSON and the complete summary are in
 `reports/phase9-drift/`. HTML file generation and JSON contents were verified;
 visual browser review has not been performed.
+
+Phase 9 validation is complete. [GitHub run 38560936350](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38560936350)
+validated implementation commit `ee002e52350485d6a3a157967dde7dde1891dfd7`:
+29 tests, dependency consistency, source compilation, monitoring configuration,
+Docker build and experimental version-1 deployment with readiness/prediction checks.
+Both DVC stages reproduced identical output hashes after the lock change; raw
+content and modification times were preserved. Detailed evidence and the file
+inventory are in `reports/phase9-validation.json`. The following documentation-only
+commit records those results. Next is Phase 10: combine service, operational,
+labeled-quality and drift evidence in the separate health decision layer.

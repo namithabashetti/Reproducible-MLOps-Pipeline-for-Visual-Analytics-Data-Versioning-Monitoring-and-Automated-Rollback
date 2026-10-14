@@ -630,3 +630,13 @@ and processed content SHA-256 remained
 `25a92d0c07b880d45be6db7bf5a46e705fb675d8cdaa22207b25ab8fe3c26ed6`.
 Split and processed DVC output hashes are unchanged; only dependency-lock metadata
 changed in `dvc.lock`. Raw file sizes/modification times remain unchanged.
+
+Phase 9 finished with 29 passing local tests (90.002 seconds) and 29 passing
+GitHub tests (188.266 seconds). GitHub run `38560936350` validated commit
+`ee002e52350485d6a3a157967dde7dde1891dfd7`, built the CPU image and deployed
+experimental registry version 1 with real readiness and prediction probes.
+`reports/phase9-validation.json` records the full evidence. The separate health
+decision and rollback phases remain unimplemented; registry stable aliases remain
+unassigned. Reopening the session later found Docker stopped; the same existing
+containers were restarted for the handoff. This does not refresh historical drift
+observations or enable automatic service startup.
