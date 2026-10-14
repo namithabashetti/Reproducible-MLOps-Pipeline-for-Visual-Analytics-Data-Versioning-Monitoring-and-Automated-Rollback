@@ -16,7 +16,7 @@ from src.serving.api import app, decode_image, load_model, predict_image
 from src.serving.deploy import stage_model
 
 
-async def request(method, path, body=b"", content_type="image/png"):
+async def request(method, path, body=b"", content_type="image/png", raw=False):
     messages = []
 
     async def receive():
@@ -29,10 +29,40 @@ async def request(method, path, body=b"", content_type="image/png"):
                "path": path, "raw_path": path.encode(), "query_string": b"",
                "headers": [(b"content-type", content_type.encode())],
                "client": ("127.0.0.1", 1), "server": ("127.0.0.1", 8000)}, receive, send)
-    return messages[0]["status"], json.loads(b"".join(m.get("body", b"") for m in messages[1:]))
+    payload = b"".join(m.get("body", b"") for m in messages[1:])
+    return messages[0]["status"], payload.decode() if raw else json.loads(payload)
 
 
 class ServingTests(unittest.IsolatedAsyncioTestCase):
+    async def test_metrics_outcomes_latency_and_scrape_exclusion(self):
+        from prometheus_client.parser import text_string_to_metric_families
+
+        manifest = {"model_name": "fixture", "model_version": "7", "checkpoint_sha256": "abc",
+                    "deployment_mode": "experimental", "inference": {
+                        "max_upload_bytes": 1024, "max_image_pixels": 100}}
+        with patch("src.serving.api.load_model", return_value=(object(), manifest)), \
+                patch("src.serving.api.predict_image", return_value=[]) as inference:
+            async with app.router.lifespan_context(app):
+                image = BytesIO()
+                Image.new("RGB", (4, 5)).save(image, format="PNG")
+                await request("GET", "/health")
+                await request("GET", "/metrics", raw=True)
+                await request("POST", "/predict", image.getvalue())
+                await request("POST", "/predict", b"corrupt")
+                inference.side_effect = RuntimeError("fixture failure")
+                with self.assertLogs("src.serving.api", level="ERROR"):
+                    await request("POST", "/predict", image.getvalue())
+                _, text = await request("GET", "/metrics", raw=True)
+                samples = [s for family in text_string_to_metric_families(text) for s in family.samples]
+                counts = {s.labels["outcome"]: s.value for s in samples if s.name == "va_prediction_requests_total"}
+                self.assertEqual(counts, {"success": 1, "client_error": 1, "server_error": 1})
+                self.assertEqual(sum(s.value for s in samples if s.name == "va_prediction_duration_seconds_count"), 3)
+                self.assertEqual(next(s.value for s in samples if s.name == "va_model_ready"), 1)
+                info = next(s for s in samples if s.name == "va_model_info")
+                self.assertEqual(info.labels["model_version"], "7")
+                self.assertEqual(info.labels["deployment_mode"], "experimental")
+                self.assertIn("deployment_id", info.labels)
+
     async def test_readiness_input_errors_and_prediction_identity(self):
         manifest = {"model_name": "fixture", "model_version": "7", "checkpoint_sha256": "abc",
                     "deployment_mode": "experimental", "inference": {

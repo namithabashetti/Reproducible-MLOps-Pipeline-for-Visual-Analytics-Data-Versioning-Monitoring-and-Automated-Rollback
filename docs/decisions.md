@@ -498,6 +498,44 @@ The once-only runner exited after success. The container remains available local
 Registry aliases are still empty. Original data metadata and DVC stages remain
 unchanged. `reports/phase7-validation.json` links the local and CI evidence.
 
+## Phase 8 operational monitoring — 2026-10-14
+
+The approved Prometheus/Grafana phase uses the official Python client 0.26.0,
+Prometheus 3.15.0 and Grafana 13.2.3. Container images are pinned by digest.
+No additional monitoring platform, cloud subscription or frontend was introduced.
+The API exports prediction counters and latency histograms by outcome, readiness,
+and model/inference identity. Counters/histograms identify model version and
+deployment ID. Client errors/cancellations are separate; health/metric requests
+do not become prediction traffic. The p95 dashboard is a histogram estimate,
+not an exact request-level statistic or an approved decision threshold.
+
+The registry-verifying deployment path now attaches the API to a project-owned
+Docker network with the stable DNS name `api`. Monitoring uses Compose separately
+from model deployment. All three ports remain loopback-only. Grafana is provisioned
+as a local anonymous Viewer with no initial admin user, signup or login UI;
+datasource/dashboard editing remains in Git. This is a deliberate local-review
+configuration, not a public-hosting configuration. Credentials were not created.
+
+Prometheus uses persistent local storage with two-day/1-GB block retention;
+the WAL/head and total container storage are additional. Grafana data is also
+persistent. Automatic plugin installation, telemetry and update checks are disabled.
+The services have no auto-restart policy or Windows startup installation.
+
+Local verification passed 23 tests and exercised ten real validation-image
+predictions plus two invalid inputs. All seven dashboard queries worked through
+both Prometheus and Grafana. Stopping the API produced `up=0` and unavailable
+readiness; restarting restored collection. Restarting monitoring preserved
+historical samples and the provisioned dashboard. Browser automation was not
+connected, so visual screenshot inspection remains unperformed; dashboard
+definitions, permissions and data queries were checked through Grafana's API.
+
+The new client changed the Windows lockfile. Both DVC stages were rerun, and
+their output hashes stayed identical; only dependency hashes in dvc.lock changed.
+Raw inputs were preserved. No retraining, model promotion, drift computation,
+overall health classification or automated rollback was performed. The isolated
+500-metric test uses mocked inference; the production demo fault remains off.
+Updated CI configuration validation/build/deployment will be verified separately.
+
 ## Delivery gates
 
 The private GitHub repository already exists; use it and preserve remote changes.

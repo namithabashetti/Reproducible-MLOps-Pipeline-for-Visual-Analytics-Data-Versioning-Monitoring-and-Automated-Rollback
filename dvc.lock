@@ -10,8 +10,8 @@ stages:
       nfiles: 10000
     - path: requirements-lock.txt
       hash: md5
-      md5: bf5685c58fdb95cf6b827ec02a68d504
-      size: 3524
+      md5: 4b18ccd138bc3541ba6569fcdd6386f0
+      size: 3551
     - path: src/data/split.py
       hash: md5
       md5: 38d5b5439de2d7e3196173d074828878
@@ -57,8 +57,8 @@ stages:
       nfiles: 10000
     - path: requirements-lock.txt
       hash: md5
-      md5: bf5685c58fdb95cf6b827ec02a68d504
-      size: 3524
+      md5: 4b18ccd138bc3541ba6569fcdd6386f0
+      size: 3551
     - path: src/data/preprocess.py
       hash: md5
       md5: 0aadc30dafb01582f7dc685592a6f23e

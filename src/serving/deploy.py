@@ -91,6 +91,13 @@ def deploy(project, staged, manifest, image, docker):
     if settings["host_bind_address"] != "127.0.0.1":
         raise ValueError("Only loopback deployment is approved")
     image_id = subprocess.check_output([docker, "image", "inspect", image, "--format", "{{.Id}}"], text=True).strip()
+    # A stable network/DNS name lets Prometheus keep scraping across replacements.
+    network = subprocess.run([docker, "network", "inspect", "visual-analytics"], capture_output=True, text=True)
+    if network.returncode != 0:
+        subprocess.run([docker, "network", "create", "--label", "visual-analytics.project=hard-hat-detector",
+                        "visual-analytics"], check=True, capture_output=True)
+    elif (json.loads(network.stdout)[0].get("Labels") or {}).get("visual-analytics.project") != "hard-hat-detector":
+        raise ValueError("Network name belongs to another application; refusing to use it")
     name = "visual-analytics-api"
     previous = subprocess.run([docker, "container", "inspect", name], text=True, capture_output=True)
     previous_id = None
@@ -104,6 +111,7 @@ def deploy(project, staged, manifest, image, docker):
         docker, "run", "-d", "--name", name, "--label", "visual-analytics.project=hard-hat-detector",
         "--read-only", "--tmpfs", "/tmp:rw,nosuid,size=256m", "--cap-drop", "ALL",
         "--security-opt", "no-new-privileges", "--pids-limit", "128",
+        "--network", "visual-analytics", "--network-alias", "api",
         "--publish", f"127.0.0.1:{settings['port']}:8000",
         "--mount", f"type=bind,source={staged.resolve()},target=/model,readonly", image_id], text=True).strip()
     receipt = {"status": "starting", "container_id": container_id, "image_id": image_id,
@@ -156,7 +164,7 @@ def main():
     parser.add_argument("--store-project", type=Path, default=Path(__file__).resolve().parents[2])
     parser.add_argument("--version")
     parser.add_argument("--experimental", action="store_true")
-    parser.add_argument("--image", default="visual-analytics-api:phase7")
+    parser.add_argument("--image", default="visual-analytics-api:local")
     parser.add_argument("--stage-only", action="store_true")
     parser.add_argument("--docker", default=shutil.which("docker") or str(
         Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/DockerDesktop/resources/bin/docker.exe"))

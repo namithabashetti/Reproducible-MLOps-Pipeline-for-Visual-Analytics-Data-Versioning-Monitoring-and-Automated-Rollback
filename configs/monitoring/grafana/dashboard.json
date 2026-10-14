@@ -1,0 +1,407 @@
+{
+  "uid": "visual-analytics-operations",
+  "title": "Visual analytics \u2014 Operations",
+  "schemaVersion": 41,
+  "version": 1,
+  "editable": false,
+  "tags": [
+    "visual-analytics",
+    "experimental"
+  ],
+  "timezone": "browser",
+  "refresh": "10s",
+  "time": {
+    "from": "now-15m",
+    "to": "now"
+  },
+  "panels": [
+    {
+      "id": 1,
+      "title": "API scrape availability",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "description": "1 = scrape succeeded, 0 = failed. Missing series means monitoring is unavailable.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "up{job=\"visual-analytics-api\"}",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 2,
+      "title": "Model readiness",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 6,
+        "y": 0,
+        "w": 6,
+        "h": 4
+      },
+      "description": "Loaded model with successful warm-up. This is not model accuracy or the later Health Decision.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_model_ready{job=\"visual-analytics-api\"} and on(job,instance) (up{job=\"visual-analytics-api\"} == 1)",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "DOWN",
+                  "color": "red"
+                },
+                "1": {
+                  "text": "UP",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 3,
+      "title": "Loaded model / deployment",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 0,
+        "w": 12,
+        "h": 4
+      },
+      "description": "Experimental status is explicit. Inference and checkpoint hashes bind this deployment to its settings.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_model_info{job=\"visual-analytics-api\"} and on(job,instance) (up{job=\"visual-analytics-api\"} == 1)",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true,
+              "Value": true,
+              "checkpoint_sha256": true,
+              "inference_sha256": true
+            },
+            "indexByName": {
+              "model_name": 0,
+              "model_version": 1,
+              "deployment_mode": 2,
+              "deployment_id": 3
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 4,
+      "title": "Prediction counts since process start",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 4,
+        "w": 12,
+        "h": 6
+      },
+      "description": "POST /predict only. Health checks, metric scrapes, and other routes are excluded. Counters reset at restart.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_prediction_requests_total{job=\"visual-analytics-api\"}",
+          "legendFormat": "",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "transformations": [
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 5,
+      "title": "Prediction request rate",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 4,
+        "w": 12,
+        "h": 6
+      },
+      "description": "Separate series for successes, client input errors/cancellations, and server failures. Deployment IDs prevent mixing model/configuration changes.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,deployment_id,outcome) (rate(va_prediction_requests_total{job=\"visual-analytics-api\"}[2m]))",
+          "legendFormat": "v{{model_version}} / {{deployment_id}} / {{outcome}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqps",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 6,
+      "title": "Server error fraction (client errors excluded)",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 10,
+        "w": 12,
+        "h": 7
+      },
+      "description": "5xx / (success + 5xx). An idle window has no denominator and is unavailable, not proof of health. No automatic rollback is triggered.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome=\"server_error\"}[2m])) / sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m]))",
+          "legendFormat": "v{{model_version}} / {{deployment_id}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0,
+          "max": 1
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 7,
+      "title": "Approximate p95 handling latency",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 10,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Includes upload reading, decoding, queue wait and inference up to response headers. Excludes client errors and network delivery time. Histogram estimate; idle windows have no p95. Not a calibrated health threshold.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.95, sum by(le,model_version,deployment_id) (rate(va_prediction_duration_seconds_bucket{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])))",
+          "legendFormat": "v{{model_version}} / {{deployment_id}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "min": 0
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    }
+  ],
+  "annotations": {
+    "list": []
+  }
+}

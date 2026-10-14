@@ -9,12 +9,15 @@ import logging
 import os
 from pathlib import Path
 import warnings
+from time import perf_counter
 
 import cv2
-from fastapi import FastAPI, HTTPException, Request
+from fastapi import FastAPI, HTTPException, Request, Response
 import numpy as np
 from PIL import Image, ImageOps, UnidentifiedImageError
 from starlette.concurrency import run_in_threadpool
+from starlette.requests import ClientDisconnect
+from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, Info, generate_latest, CONTENT_TYPE_LATEST
 
 from src.data.preprocess import letterbox
 
@@ -77,6 +80,27 @@ async def lifespan(app):
     app.state.model, app.state.manifest = await run_in_threadpool(
         load_model, Path(os.environ.get("MODEL_DIRECTORY", "/model")))
     app.state.inference_lock = asyncio.Lock()
+    registry = CollectorRegistry()
+    labels = (str(app.state.manifest["model_version"]), os.environ.get("HOSTNAME", "local"))
+    label_names = ("model_version", "deployment_id")
+    requests = Counter("va_prediction_requests", "Completed POST /predict requests by outcome",
+                       (*label_names, "outcome"), registry=registry)
+    latency = Histogram("va_prediction_duration_seconds", "API handling time including decoding and inference queue",
+                        (*label_names, "outcome"), registry=registry,
+                        buckets=(0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 3, 5, 10, 30, 60))
+    for outcome in ("success", "client_error", "server_error"):
+        requests.labels(*labels, outcome)
+        latency.labels(*labels, outcome)
+    ready = Gauge("va_model_ready", "Model loaded and warm-up completed; not model quality",
+                  label_names, registry=registry).labels(*labels)
+    ready.set_function(lambda: int(app.state.ready))
+    info = Info("va_model", "Loaded checkpoint and inference identity", label_names, registry=registry)
+    manifest = app.state.manifest
+    info.labels(*labels).info({
+        "model_name": manifest["model_name"], "checkpoint_sha256": manifest["checkpoint_sha256"],
+        "deployment_mode": manifest["deployment_mode"],
+        "inference_sha256": hashlib.sha256(json.dumps(manifest["inference"], sort_keys=True).encode()).hexdigest()})
+    app.state.metrics = {"registry": registry, "requests": requests, "latency": latency, "labels": labels}
     app.state.ready = True
     logging.getLogger(__name__).info("Loaded %s version %s (%s)",
                                     app.state.manifest["model_name"],
@@ -91,6 +115,31 @@ async def lifespan(app):
 
 app = FastAPI(title="Hard-hat detector", lifespan=lifespan,
               docs_url=None, redoc_url=None, openapi_url=None)
+
+
+@app.middleware("http")
+async def measure_predictions(request: Request, call_next):
+    if request.method != "POST" or request.url.path != "/predict" or not hasattr(request.app.state, "metrics"):
+        return await call_next(request)
+    started, status = perf_counter(), 500
+    try:
+        response = await call_next(request)
+        status = response.status_code
+        return response
+    except (ClientDisconnect, asyncio.CancelledError):
+        status = 499  # No response is delivered; do not call a cancelled client request a server error.
+        raise
+    finally:
+        outcome = "server_error" if status >= 500 else "client_error" if status >= 400 else "success"
+        metrics = request.app.state.metrics
+        metrics["requests"].labels(*metrics["labels"], outcome).inc()
+        metrics["latency"].labels(*metrics["labels"], outcome).observe(perf_counter() - started)
+
+
+@app.get("/metrics")
+def metrics(request: Request):
+    return Response(generate_latest(request.app.state.metrics["registry"]),
+                    headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 @app.get("/health")

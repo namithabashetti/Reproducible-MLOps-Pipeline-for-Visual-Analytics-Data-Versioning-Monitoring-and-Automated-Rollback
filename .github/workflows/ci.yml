@@ -82,6 +82,25 @@ jobs:
           & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -m unittest discover -s tests -v
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
+      - name: Validate monitoring configuration
+        run: |
+          @'
+          import os
+          from pathlib import Path
+          import subprocess
+          import yaml
+
+          docker = str(Path(os.environ["LOCALAPPDATA"]) / "Programs/DockerDesktop/resources/bin/docker.exe")
+          subprocess.run([docker, "compose", "-f", "compose.monitoring.yaml", "config", "--quiet"], check=True)
+          image = yaml.safe_load(Path("compose.monitoring.yaml").read_text())["services"]["prometheus"]["image"]
+          config = Path(os.environ["RUNNER_TEMP"]) / "prometheus.yaml"
+          config.write_bytes(Path("configs/monitoring/prometheus.yaml").read_bytes())
+          subprocess.run([docker, "run", "--rm", "--network", "none", "--entrypoint", "promtool",
+                          "--mount", f"type=bind,source={config},target=/config.yaml,readonly",
+                          image, "check", "config", "/config.yaml"], check=True)
+          '@ | & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+
       - name: Build CPU serving image
         run: |
           & "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe" build --progress plain -t "visual-analytics-api:$env:GITHUB_SHA" .
@@ -115,6 +134,7 @@ jobs:
           Dependency lock SHA-256: {lock_hash}
           Python: 3.11.9 / Windows
           Source compilation, dependency consistency and isolated tests passed.
+          Monitoring Compose and Prometheus configuration validated.
           CPU Docker image built: visual-analytics-api:{os.environ["GITHUB_SHA"]}
           Deployment selection: {os.environ["DEPLOYMENT_MODE"]}
           Selected deployments require matching readiness and a real prediction probe.

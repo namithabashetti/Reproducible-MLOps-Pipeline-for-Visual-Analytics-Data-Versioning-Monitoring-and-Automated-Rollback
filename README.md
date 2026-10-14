@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 7 Docker/FastAPI serving and real GitHub build/deployment passed.**
+**Current status: Phase 8 local Prometheus/Grafana integration passed; updated CI verification is pending.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 22 current tests passed in GitHub Actions.
+Evidence: `reports/phase3-validation.json`; all 23 current tests passed locally.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -17,7 +17,8 @@ The CUDA smoke run and 30-epoch baseline completed with finite losses and metric
 Best-checkpoint validation mAP50 is 61.94%, but person detection is weak
 (1.94% per-class mAP50). This is an experimental baseline, not an approved stable
 model. MLflow now records this baseline as `hard-hat-detector` version 1.
-Local tracking and experimental CPU serving are verified. Monitoring and rollback remain future work. Neither `stable`
+Local tracking, experimental CPU serving, and operational monitoring are verified.
+Drift, health decisions, and rollback remain future work. Neither `stable`
 nor `previous_stable` has been assigned.
 
 ## Approved lifecycle
@@ -60,6 +61,9 @@ FR-03 and amended AC-02 now use Drive. The original PRD remains unchanged; see
 | `src/serving/deploy.py` | Resolve registry aliases or an explicit experimental version, verify all evidence, stage bytes, run Docker, and verify readiness/prediction. |
 | `Dockerfile` / `.dockerignore` | Build the CPU runtime from an allowlisted context; exclude datasets, weights, credentials and Git history. |
 | `requirements-serving.txt` | Separate pinned Linux CPU serving dependency closure, checked by pip inside the image. |
+| `compose.monitoring.yaml` | Local Prometheus/Grafana containers, pinned images, loopback ports, and persistent monitoring volumes. |
+| `configs/monitoring/prometheus.yaml` | Ten-second scrapes of the API through its shared Docker network name. |
+| `configs/monitoring/grafana/` | Provision the Prometheus datasource and seven-panel read-only operations dashboard. |
 | `tests/test_serving.py` | API status/identity, image bounds, coordinate mapping, checkpoint integrity, and deployment approval gates. |
 | `.github/workflows/ci.yml` | Manual Windows validation: isolated checkout, locked dependencies, source compilation, tests, and commit/lock evidence. |
 | `dvc.yaml` / `dvc.lock` | Data-stage commands, dependencies, parameters, and resulting output identities. |
@@ -109,13 +113,13 @@ requiring a PowerShell execution-policy change. The environment does not inherit
 global site-packages. pip may reuse cached distributions, but the global Python
 installation is not modified.
 
-`requirements.txt` lists direct dependencies through Phase 7: PyYAML, Pillow, DVC,
+`requirements.txt` lists direct dependencies through Phase 8: PyYAML, Pillow, DVC,
 its S3 and Google Drive integrations, NumPy, OpenCV, PyTorch, torchvision, and
-Ultralytics, MLflow, FastAPI and Uvicorn. `requirements-lock.txt` pins their resolved
+Ultralytics, MLflow, FastAPI, Uvicorn and the official Prometheus client. `requirements-lock.txt` pins their resolved
 Windows/Python 3.11 dependencies. FastAPI/Uvicorn were already present through
 MLflow; naming them as direct serving dependencies did not change this lock.
 The Linux image uses `requirements-serving.txt`, CPU PyTorch 2.2.2/torchvision 0.17.2,
-and the same Ultralytics 8.3.230. Monitoring packages are not installed yet.
+and the same Ultralytics 8.3.230. Prometheus client 0.26.0 is pinned in both environments.
 
 Docker Desktop 4.94.0, Engine 29.8.2, Compose 5.5.1, and WSL 2 were detected during
 preparation. The Linux engine is reachable, and the user verified `hello-world`.
@@ -581,7 +585,7 @@ Start Docker Desktop before building. From the project directory in PowerShell:
 ```powershell
 $docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
 & $docker build -t visual-analytics-api:phase7 .
-.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental
+.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental --image visual-analytics-api:phase7
 Invoke-RestMethod http://127.0.0.1:8000/health
 ```
 
@@ -618,7 +622,7 @@ are recorded settings. These are starting inference defaults, not calibrated hea
 thresholds or accuracy claims. Requests accept static PNG/JPEG, at most 4 MiB encoded
 and 4,194,304 decoded pixels. Invalid content returns 415/422, oversized images 413,
 not-ready 503, and inference failures 500. An empty detection list is a valid result.
-There is no `/metrics` endpoint yet; Prometheus belongs to Phase 8.
+Phase 8 adds `/metrics` without changing the prediction contract.
 
 `artifacts/serving/deployment.json` points to the last deployment attempt; per-container
 receipts preserve its image ID, source revision/dirty state, model lineage, settings,
@@ -668,7 +672,104 @@ without a stable alias. All 46 Linux serving pins were checked inside the image.
 Dataset metadata and DVC stages remain unchanged. Evidence is in
 `reports/phase7-validation.json`, `reports/phase7-api-validation.json`, the GitHub
 run receipt/log, and `artifacts/serving/deployment.json`. Model quality has not been
-improved by serving it; stable promotion remains pending. Next is Phase 8 monitoring.
+improved by serving it; stable promotion remains pending.
+
+## Phase 8: Prometheus and Grafana operations
+
+Build/deploy the current API through the existing procedure, then start monitoring:
+
+```powershell
+$docker = "$env:LOCALAPPDATA\Programs\DockerDesktop\resources\bin\docker.exe"
+& $docker build -t visual-analytics-api:local .
+.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental
+& $docker compose -f compose.monitoring.yaml up -d
+```
+
+Open [Grafana Operations](http://127.0.0.1:3000/d/visual-analytics-operations) or
+[Prometheus](http://127.0.0.1:9090/query). The API metrics are at
+[localhost:8000/metrics](http://127.0.0.1:8000/metrics). All published ports bind only
+to 127.0.0.1. Grafana provides anonymous **Viewer** access for this local demonstration;
+no initial admin user is created, sign-up/login UI are disabled, and dashboards and
+datasources are provisioned from files. There are no passwords in the repository.
+Anyone with access to this laptop can read/query these local operational metrics.
+This configuration is not intended for public hosting. Edit dashboard JSON in Git,
+not through Grafana. Do not enable anonymous Admin access.
+
+`deploy.py` creates/reuses the project-labeled `visual-analytics` Docker network
+and attaches each replacement API as `api`. Prometheus scrapes `api:8000/metrics`
+every 10 seconds, with a 5-second timeout. Grafana queries `prometheus:9090` on
+that network. Replacing the API keeps its scrape address; metrics carry model
+version and container/deployment ID so different deployments are not aggregated
+into one latency or error measurement. Network names owned by another project
+are refused. The monitoring Compose file intentionally leaves model deployment
+under the existing registry-verifying procedure.
+
+| Metric | Meaning / consumer |
+| --- | --- |
+| `va_prediction_requests_total` | POST `/predict` requests labeled success, client_error or server_error; counts/rates and server-error fractions |
+| `va_prediction_duration_seconds` | Classic histogram in seconds, including upload reading, decoding, inference queue and model execution up to response headers; approximate p95 |
+| `va_model_ready` | Model loaded with successful warm-up; operational readiness, not quality or overall health |
+| `va_model_info` | Model name/version, checkpoint SHA, inference-settings SHA, experimental/approved mode and deployment ID |
+| Prometheus `up` | Whether the last scrape succeeded; API failure is visible even when the service cannot export its own gauge |
+
+Health/metrics/other routes do not increment prediction traffic. Client input
+errors and request cancellations are separated from server errors. The dashboard
+uses `5xx / (success + 5xx)` and excludes client errors from latency too. Every
+outcome is initialized at zero; no traffic produces an undefined error fraction
+and p95, not a fabricated healthy measurement. Two-minute `rate()` windows handle
+counter resets, but require enough scrape history. Version/deployment labels keep
+replacement histories distinct. In-memory API counters reset on process restart.
+Latency buckets are 0.025, 0.05, 0.1, 0.2, 0.5, 1, 2, 3, 5, 10, 30 and 60 seconds
+plus infinity. This is a histogram estimate, not exact request-level p95 and not
+a calibrated health threshold. Network delivery time is not measured.
+
+The seven panels show scrape availability, readiness, loaded model identity,
+prediction counts, request rate, server-error fraction, and approximate p95.
+Readiness is masked when `up=0`, so a stale gauge cannot appear healthy during
+an outage. No alert or rollback controller is enabled in this phase. There is
+no confidence/accuracy proxy, drift computation, or use of final-test data.
+
+Prometheus 3.15.0 and Grafana 13.2.3 images are pinned by digest. Named Docker
+volumes preserve time series and Grafana state. Prometheus retains at most two
+days / 1 GB of TSDB blocks; WAL/head storage and total container disk use may
+exceed that block-retention limit. Grafana telemetry/update checks and automatic
+plugin preinstallation are disabled. No cloud monitoring subscription is used.
+
+```powershell
+& $docker compose -f compose.monitoring.yaml logs --tail 30
+& $docker compose -f compose.monitoring.yaml stop
+# Later, with the API running:
+& $docker compose -f compose.monitoring.yaml up -d
+```
+
+Stopping keeps the named volumes. Do not use `down -v` unless intentionally
+discarding monitoring history. These containers have no automatic restart policy;
+start Docker and the services after a laptop reboot. The API can be restarted
+with `docker start visual-analytics-api` when its existing image/model are suitable.
+
+Local Phase 8 checks passed: all 23 tests, exact counter deltas for ten real
+validation-image predictions and two invalid images, all seven PromQL expressions
+and Grafana datasource queries, read-only dashboard permissions, API outage and
+recovery, and preserved historical data/dashboard after monitoring restart.
+The 500 outcome is exercised by an isolated mocked-inference test, not by enabling
+a production fault. No browser automation surface was available for a visual
+screenshot review; the dashboard definition, permissions, and data queries were
+verified through Grafana's API. Evidence: `reports/phase8-integration.json`.
+
+Adding the client changed the Windows dependency lock, so both DVC stages were
+actually rerun. Split and processed-output hashes stayed identical; only the lock
+dependency hash changed. The original dataset remains unchanged. CI also validates
+Compose and runs `promtool check config` before building; its updated run is pending.
+
+Implementation follows the official [Prometheus client metric types](https://prometheus.github.io/client_python/instrumenting/),
+[histogram guidance](https://prometheus.github.io/client_python/instrumenting/histogram/),
+and [Grafana provisioning](https://grafana.com/docs/grafana/latest/administration/provisioning/).
+
+| Requirement | File / function | Validation |
+| --- | --- | --- |
+| FR-13: operational collection | `api.py`: `lifespan`, `measure_predictions`, `metrics`; `prometheus.yaml` | Outcome/latency/scrape-exclusion unit test; real counter deltas and target queries |
+| FR-14: operational display | `compose.monitoring.yaml`, Grafana datasource/provider/dashboard files | Seven panel queries, provisioned read-only dashboard, restart persistence |
+| Monitoring continuity | `deploy.py`: `deploy` attaches the stable Docker DNS name | Live scrape, stopped-API detection and restored readiness |
 
 ## Storage and credentials
 
@@ -889,7 +990,8 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-09 / registry acceptance | `hard-hat-detector` version 1, verified artifact retrieval | Experimental version verified; stable selection pending quality review |
 | FR-10 / AC-08 | GitHub run 38250748811: 22 tests, Docker build, registry deployment, readiness and prediction | Verified for explicit experimental deployment; stable promotion is separate |
 | FR-11 / FR-12 | `Dockerfile`, `api.py`, `deploy.py`, serving tests and real validation-image prediction | Local experimental serving verified |
-| FR-13 to FR-18 | Approved monitoring and calibration policies | Pending |
+| FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
+| FR-15 to FR-18 | Approved drift and calibration policies | Pending |
 | FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
 
 `tests/test_data_validation.py` checks the validation contract using valid and
