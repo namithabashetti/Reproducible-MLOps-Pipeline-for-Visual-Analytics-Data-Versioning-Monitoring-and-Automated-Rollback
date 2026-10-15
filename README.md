@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 12 end-to-end validation is in progress. Phase 11 passed all 53 local and CI tests. The model remains experimental, with no approved rollback target.**
+**Current status: Phase 12 validation completed with 11 acceptance criteria verified, 2 partial, and 2 blocked. All 53 CI tests, monitoring checks and the CPU image build passed. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1253,3 +1253,41 @@ deadline.
 The existing Kaggle provenance gap and missing approved stable target remain
 explicit. Operational recovery probes and fixture-based switch tests do not
 establish a real approved-model rollback or post-rollback monitoring acceptance.
+
+The first complete run used clean implementation commit
+`d4acdecff2e16c0deb0e067eda3e5e1849d77fe0`. Dataset content matched the recorded
+SHA-256 manifest; all 10,000 file sizes/modification times were preserved and DVC
+reported no changes. The completed training run, local registry artifacts and
+served checkpoint matched. Exact eligible request counts were 110 and 250; three
+client errors were excluded. The measured p95 baseline was 0.069444 seconds under
+the existing two-second initial latency floor. The fresh current-pool replay
+reported no drift, and all seven Grafana panel queries passed. Overall health was
+`unknown` only because the approved stable quality comparison is unavailable.
+The normal-operation rollback gate rejected this decision. No switch was attempted.
+
+AC-02 through AC-12 are verified within the documented local scope, including the
+approved Google Drive replacement for GCS. Remote recovery is historical
+content-verified evidence; no new cloud transfer was performed in Phase 12.
+
+| Remaining criterion | Status | Evidence needed to close it |
+| --- | --- | --- |
+| AC-01: Kaggle source/version and DVC tracking | Partial | DVC/content verified; the original source URL/version is unknown, as confirmed by the user. |
+| AC-13: combined model health | Partial | Operational decisions and controlled decision tests passed; a real labeled comparison against an approved stable model remains unavailable. |
+| AC-14: previous-stable rollback | Blocked | A reviewed stable predecessor and an actual unhealthy candidate-to-predecessor switch. |
+| AC-15: monitoring after rollback | Blocked | Fresh monitoring evidence after that actual approved-model switch. |
+
+Evidence: `reports/phase12-live/validation.json`, `reports/phase12-live/health.json`,
+`reports/phase12-live/drift/evidently.html`, and the phase summary
+`reports/phase12-validation.json`. This completes the available validation work;
+it does not establish full project acceptance or production readiness. Person-class
+quality review is the next step before choosing an approved stable model. The
+current person-class validation mAP50 is 0.01939, with precision/recall both zero
+at the recorded operating point; the final-test pool remains unevaluated.
+
+GitHub [run 38738939200](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38738939200)
+passed on October 15, 2026 against the same implementation commit as the live run.
+All 53 regression tests passed in 140.484 seconds; dependency consistency,
+compilation, monitoring configuration validation and the CPU Docker image build
+also passed. Deployment was `none`. The API, Prometheus and Grafana containers
+were running at the final check. The documentation follow-up records these results
+without changing the validated implementation.

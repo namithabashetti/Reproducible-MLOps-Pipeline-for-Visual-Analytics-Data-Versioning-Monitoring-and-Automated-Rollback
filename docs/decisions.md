@@ -819,4 +819,29 @@ reported state is `completed_with_acceptance_gaps` when checks complete but
 provenance, stable quality or actual approved rollback evidence is missing.
 
 Phase 12 validation does not silently approve version 1 or invent a second model.
-Its live result and final acceptance table will be recorded after execution.
+The clean-commit live run (`d4acdecff2e16c0deb0e067eda3e5e1849d77fe0`) completed on
+October 15, 2026. Content and metadata of all 10,000 dataset files matched; DVC
+was clean. Training/registry/deployment identities matched. The two traffic
+windows contained exactly 110/250 eligible predictions with three excluded client
+errors. The measured baseline p95 was 0.069444 seconds. Fresh PSI/KS reported no
+drift; all seven Grafana panel queries passed. Overall health remained unknown
+solely for missing approved stable quality evidence, and the rollback gate refused
+that decision. Dataset, deployment receipt/process and registry aliases stayed
+unchanged during the run.
+
+Acceptance is deliberately incomplete: AC-02 through AC-12 are verified in the
+documented local scope; AC-01 and AC-13 are partial; AC-14 and AC-15 are blocked.
+The user confirmed that the original Kaggle URL/version is unknown. No inferred
+source or version is substituted. The other gaps require a reviewed stable model,
+real comparative quality evidence, a real switch to its recorded predecessor,
+and fresh post-switch monitoring. Historical remote recovery and fixture tests
+retain their stated scope. The final-test pool is still unevaluated.
+
+The final audit is in `reports/phase12-live/validation.json`; its reproducible
+command and acceptance table are in the README. GitHub run `38738939200` passed
+on October 15, 2026 against the same implementation commit as the live run. All
+53 regression tests passed in 140.484 seconds, along with dependency consistency,
+compilation, monitoring configuration validation and the CPU image build.
+Deployment was `none`. Final container checks showed the existing API healthy
+and Prometheus/Grafana running. The validation phase is complete with the stated
+acceptance gaps; full project acceptance remains incomplete.
