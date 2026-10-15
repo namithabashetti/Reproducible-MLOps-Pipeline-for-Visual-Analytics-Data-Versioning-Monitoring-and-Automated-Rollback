@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 11 rollback controls passed 53 local tests and live recovery-probe checks; GitHub validation is pending. The model remains experimental, with no approved rollback target.**
+**Current status: Phase 11 rollback controls passed all 53 local and GitHub CI tests, live recovery-probe checks, monitoring validation, and the CPU image build. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1215,5 +1215,10 @@ controller refused rollback because no approved target exists. All 10,000 origin
 file sizes/modification times and DVC status are unchanged; registry aliases remain
 empty. Evidence is in `reports/phase11-validation.json`,
 `reports/phase11-live-recovery-probes.json`, and `reports/phase11-no-approved-target.json`.
+GitHub [run 38696131541](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38696131541)
+passed on October 15, 2026 for implementation commit
+`ede7e883a01832567714ea29a74296cea89f4809`: all 53 tests passed in 169.897 seconds,
+with locked dependency consistency, source compilation, monitoring configuration
+validation and the CPU Docker image build also successful. Deployment was `none`.
 A real approved-model rollback cannot be demonstrated with the current registry.
 Next is Phase 12: end-to-end validation, with that acceptance gap kept explicit.

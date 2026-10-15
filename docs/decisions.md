@@ -795,4 +795,9 @@ controlled in fixtures. Live checks against the existing experimental service
 passed three readiness probes, twenty real predictions and fresh monitoring
 verification without replacing it. The live controller reported no approved target
 and made no switch. Dataset metadata, DVC status and registry aliases are unchanged.
-GitHub validation remains pending; it will run with deployment `none`.
+GitHub run `38696131541` passed on October 15, 2026 for implementation commit
+`ede7e883a01832567714ea29a74296cea89f4809`: all 53 tests passed in 169.897 seconds,
+with locked dependency consistency, compilation, monitoring configuration validation
+and the CPU image build successful. Deployment was `none`; the run did not replace
+the experimental API. The implementation is validated, with the real approved-model
+switch explicitly unverified until a reviewed target exists.
