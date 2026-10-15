@@ -738,3 +738,61 @@ availability and Grafana database health. No registry alias was added. Saved liv
 test decisions are historical evidence after expiry, not current health claims.
 Phase 10 is complete; Phase 11 will add rollback controls, with stable selection
 and real comparative quality still subject to the existing approval requirements.
+
+## Phase 11: recorded-target rollback and bounded recovery
+
+FR-19 selects the approved predecessor captured before a candidate replaces it,
+not a guessed numeric neighbor or the registry's latest version. Normal deployment
+verifies a ready predecessor's model against the local MLflow evidence bundle and
+records the model manifest, immutable Docker image ID, numeric version and actual
+loopback port before removal. It only captures an approved deployment whose
+version still belongs to `stable` or `previous_stable`. Readiness is an operational
+check; the existing registry approval remains the quality gate.
+
+FR-20 uses the existing `deploy()` implementation for both paths. Artifact hashes
+and alias approval are checked again before rollback; recorded inference/class
+settings are restored rather than regenerated from candidate configuration. The
+original image must be available locally. No remote storage or registry upload
+is needed. Restored port information is also read by the host health collector.
+
+The bounded `src.monitoring.rollback` CLI accepts a fresh Phase 10 decision or
+collects evidence itself. It compares the current policy and model/container ID,
+checks Docker's process start time, and re-evaluates the evidence before acting.
+A quality-triggered decision must still refer to the current stable baseline.
+The final removal boundary checks deployment/process identity and decision expiry
+again. Unknown health and drift alone do not authorize rollback.
+
+Normal deployment and rollback serialize through an exclusive local lock. Before
+replacement, rollback flushes an exclusive attempt file keyed by failed container
+ID. A failed, completed or interrupted attempt prevents another attempt for that
+deployment. No retry loop, inferred cooldown, or automatic alias mutation is
+introduced. An interrupted process leaves its lock/attempt evidence for manual
+inspection; these records must not be automatically deleted to resume a switch.
+Receipt pointers are published with atomic file replacement. A rollback-created
+deployment has no automatic further rollback target, preventing oscillation.
+
+FR-21 requires three matching readiness responses ten seconds apart, twenty
+successful predictions from distinct validation images and fresh raw Prometheus
+samples for `up`, the restored model identity and its readiness. Raw range samples
+are used so an instant-query evaluation timestamp cannot disguise an old scrape.
+Prediction responses must match the restored model and inference hash. Missing
+or stale monitoring fails recovery confirmation, even if serving has restarted.
+The attempt retains partial probe evidence and the restored deployment receipt;
+it does not swap back or retry. Operational `recovered` is not overall model-quality
+`healthy`, and old drift/audit/latency reports are not automatically relabeled.
+
+No continuous service, demonstration fault, new package, training run, storage
+transfer or stable promotion is introduced. The real registry remains experimental
+and lacks an approved target. Controlled fixtures test switching and failure
+paths; the live project must refuse rollback until a reviewed stable predecessor
+has actually been recorded. Real approved-model recovery remains an acceptance
+gap for Phase 12, rather than being simulated by approving the weak baseline.
+
+Local validation passed 53 tests, including a revoked target alias during evidence
+collection and a changed stable quality baseline. The available registry/artifact
+restoration path uses a real disposable MLflow registry; Docker switching is
+controlled in fixtures. Live checks against the existing experimental service
+passed three readiness probes, twenty real predictions and fresh monitoring
+verification without replacing it. The live controller reported no approved target
+and made no switch. Dataset metadata, DVC status and registry aliases are unchanged.
+GitHub validation remains pending; it will run with deployment `none`.

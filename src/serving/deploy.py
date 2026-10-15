@@ -1,6 +1,7 @@
 """Stage a verified MLflow version and deploy it through one local Docker procedure."""
 
 import argparse
+from contextlib import contextmanager
 from datetime import datetime, timezone
 import hashlib
 from io import BytesIO
@@ -11,6 +12,7 @@ import shutil
 import subprocess
 import tempfile
 import time
+from uuid import uuid4
 from urllib.error import URLError
 from urllib.request import Request, urlopen
 
@@ -20,7 +22,7 @@ import yaml
 from src.tracking.mlflow_utils import file_hash, local_store
 
 
-def stage_model(project, store_project, version=None, experimental=False):
+def stage_model(project, store_project, version=None, experimental=False, restore_manifest=None):
     """Default to the explicit stable alias; unapproved numeric versions require opt-in."""
     client, _, registry = local_store(store_project)
     config = yaml.safe_load((project / "configs/config.yaml").read_text())
@@ -69,6 +71,13 @@ def stage_model(project, store_project, version=None, experimental=False):
                     "dataset_dvc_md5": lineage["dataset_dvc_md5"],
                     "deployment_mode": "experimental" if experimental else "approved",
                     "classes": config["dataset"]["classes"], "inference": settings}
+        if restore_manifest is not None:
+            if experimental or restore_manifest.get("deployment_mode") != "approved" or any(
+                    restore_manifest.get(key) != manifest[key] for key in
+                    ("model_name", "model_version", "run_id", "checkpoint_sha256", "bundle_sha256", "dataset_dvc_md5")):
+                raise ValueError("Recorded rollback model does not match the verified registry artifact")
+            # Restore the recorded model settings, even if the candidate changed config.yaml.
+            manifest = json.loads(json.dumps(restore_manifest))
         encoded = json.dumps(manifest, indent=2, sort_keys=True) + "\n"
         identity = hashlib.sha256(encoded.encode()).hexdigest()[:16]
         destination = store_project / "artifacts/serving" / f"v{model.version}-{identity}"
@@ -85,9 +94,63 @@ def stage_model(project, store_project, version=None, experimental=False):
     return destination, manifest
 
 
-def deploy(project, staged, manifest, image, docker):
-    """Resolve an image ID, replace only our container, and require matching readiness."""
+@contextmanager
+def deployment_lock(store_project):
+    """Serialize normal deployment and rollback; a crash leaves a fail-closed lock."""
+    path = store_project / "artifacts/serving/deployment.lock"
+    path.parent.mkdir(parents=True, exist_ok=True)
+    with path.open("x", encoding="utf-8") as handle:
+        json.dump({"pid": os.getpid(), "started_at": datetime.now(timezone.utc).isoformat()}, handle)
+        handle.flush()
+        os.fsync(handle.fileno())
+    try:
+        yield
+    finally:
+        path.unlink()
+
+
+def write_receipt(path, value):
+    """Publish a complete JSON document, never a partially written current pointer."""
+    temporary = path.with_name(path.name + ".tmp")
+    with temporary.open("w", encoding="utf-8") as stream:
+        json.dump(value, stream, indent=2, allow_nan=False)
+        stream.write("\n")
+        stream.flush()
+        os.fsync(stream.fileno())
+    os.replace(temporary, path)
+
+
+def snapshot_target(project, store_project, old, docker):
+    """Capture an approved, ready predecessor before the candidate replaces it."""
+    path = store_project / "artifacts/serving/deployment.json"
+    if not path.exists():
+        return None
+    receipt = json.loads(path.read_text())
+    if receipt["container_id"] != old["Id"]:
+        raise ValueError("Current container and deployment receipt disagree")
+    if receipt["model"]["deployment_mode"] != "approved":
+        return None
+    if receipt["status"] != "ready" or not old["State"]["Running"]:
+        raise ValueError("Cannot preserve an unready approved deployment as a rollback target")
+    bindings = old["HostConfig"]["PortBindings"]["8000/tcp"]
+    if len(bindings) != 1 or bindings[0]["HostIp"] != "127.0.0.1" or old["Image"] != receipt["image_id"]:
+        raise ValueError("Approved deployment image or loopback binding differs from its receipt")
+    port = int(bindings[0]["HostPort"])
+    with urlopen(f"http://127.0.0.1:{port}/health", timeout=5) as response:
+        if json.load(response) != {"status": "ready", **receipt["model"]}:
+            raise ValueError("Approved predecessor readiness identity mismatch")
+    staged, manifest = stage_model(project, store_project, receipt["model"]["model_version"],
+                                   restore_manifest=receipt["model"])
+    return {"model": manifest, "staged_directory": str(staged), "image_id": receipt["image_id"],
+            "source_container_id": old["Id"], "captured_at": datetime.now(timezone.utc).isoformat(),
+            "serving": {"host_bind_address": "127.0.0.1", "port": port}}
+
+
+def deploy(project, staged, manifest, image, docker, *, recovery_target=None):
+    """Shared deployment procedure; callers hold deployment_lock for the local store."""
     settings = yaml.safe_load((project / "configs/config.yaml").read_text())["serving"]
+    if recovery_target is not None:
+        settings = recovery_target["serving"]
     if settings["host_bind_address"] != "127.0.0.1":
         raise ValueError("Only loopback deployment is approved")
     image_id = subprocess.check_output([docker, "image", "inspect", image, "--format", "{{.Id}}"], text=True).strip()
@@ -101,12 +164,30 @@ def deploy(project, staged, manifest, image, docker):
     name = "visual-analytics-api"
     previous = subprocess.run([docker, "container", "inspect", name], text=True, capture_output=True)
     previous_id = None
+    target = None
+    old = None
     if previous.returncode == 0:
         old = json.loads(previous.stdout)[0]
         if (old["Config"].get("Labels") or {}).get("visual-analytics.project") != "hard-hat-detector":
             raise ValueError("Container name belongs to another application; refusing to replace it")
         previous_id = old["Id"]
+        if recovery_target is None:
+            target = snapshot_target(project, staged.parent.parent.parent, old, docker)
+    intent = {"model": manifest, "image_id": image_id, "previous_container_id": previous_id,
+              "rollback_target": target, "serving": {"host_bind_address": "127.0.0.1", "port": settings["port"]}}
+    intent_path = staged.parent / f"deployment-intent-{uuid4().hex}.json"
+    with intent_path.open("x", encoding="utf-8") as handle:
+        json.dump(intent, handle, indent=2)
+        handle.flush()
+        os.fsync(handle.fileno())
+    if old is not None:
+        if recovery_target is not None and (old["Id"] != recovery_target["failed_container_id"] or
+                old["State"]["StartedAt"] != recovery_target["failed_runtime_started"] or
+                datetime.now(timezone.utc) >= datetime.fromisoformat(recovery_target["decision_valid_until"])):
+            raise ValueError("Deployment/process changed or health evidence expired before replacement")
         subprocess.run([docker, "rm", "-f", name], check=True, capture_output=True)
+    elif recovery_target is not None:
+        raise ValueError("Failed deployment disappeared before replacement")
     container_id = subprocess.check_output([
         docker, "run", "-d", "--name", name, "--label", "visual-analytics.project=hard-hat-detector",
         "--read-only", "--tmpfs", "/tmp:rw,nosuid,size=256m", "--cap-drop", "ALL",
@@ -117,6 +198,8 @@ def deploy(project, staged, manifest, image, docker):
     receipt = {"status": "starting", "container_id": container_id, "image_id": image_id,
                "previous_container_id": previous_id, "staged_directory": str(staged),
                "started_at_utc": datetime.now(timezone.utc).isoformat(), "model": manifest,
+               "serving": intent["serving"], "rollback_target": target, "intent_file": str(intent_path),
+               "rollback_of": previous_id if recovery_target is not None else None,
                "source_commit": subprocess.check_output(["git", "rev-parse", "HEAD"], cwd=project, text=True).strip(),
                "source_dirty": bool(subprocess.check_output(["git", "status", "--porcelain"], cwd=project, text=True).strip())}
     receipt_path = staged.parent / "deployment.json"
@@ -153,9 +236,8 @@ def deploy(project, staged, manifest, image, docker):
         raise
     finally:
         # Preserve each attempt as well as the pointer used for current deployment inspection.
-        (staged.parent / f"deployment-{container_id[:12]}.json").write_text(
-            json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
-        receipt_path.write_text(json.dumps(receipt, indent=2) + "\n", encoding="utf-8")
+        write_receipt(staged.parent / f"deployment-{container_id[:12]}.json", receipt)
+        write_receipt(receipt_path, receipt)
     return receipt
 
 
@@ -170,9 +252,10 @@ def main():
         Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/DockerDesktop/resources/bin/docker.exe"))
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[2]
-    staged, manifest = stage_model(project, args.store_project.resolve(), args.version, args.experimental)
-    result = {"staged_directory": str(staged), "model": manifest} if args.stage_only else deploy(
-        project, staged, manifest, args.image, args.docker)
+    with deployment_lock(args.store_project.resolve()):
+        staged, manifest = stage_model(project, args.store_project.resolve(), args.version, args.experimental)
+        result = {"staged_directory": str(staged), "model": manifest} if args.stage_only else deploy(
+            project, staged, manifest, args.image, args.docker)
     print(json.dumps(result, indent=2))
 
 

@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 10 health decisions complete; all 39 local and GitHub CI tests, live failure/recovery checks, monitoring validation, and the CPU image build passed. The model remains experimental.**
+**Current status: Phase 11 rollback controls passed 53 local tests and live recovery-probe checks; GitHub validation is pending. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -18,7 +18,7 @@ Best-checkpoint validation mAP50 is 61.94%, but person detection is weak
 (1.94% per-class mAP50). This is an experimental baseline, not an approved stable
 model. MLflow now records this baseline as `hard-hat-detector` version 1.
 Local tracking, experimental CPU serving, and operational monitoring are verified.
-Local drift reporting and health decisions are implemented; rollback remains future work. Neither `stable`
+Local drift reporting, health decisions, and bounded rollback controls are implemented. Neither `stable`
 nor `previous_stable` has been assigned.
 
 ## Approved lifecycle
@@ -1004,7 +1004,7 @@ report failures. Do not claim acceptance criteria from configuration alone.
 | FR-13 / FR-14 | API metrics, real Prometheus scrapes, Grafana panel queries, outage/restart checks | Local operational monitoring verified |
 | FR-15 / FR-16 | Real 250/250 API replay, Evidently HTML/JSON, PSI/KS summary and exclusion/freshness tests | Local drift evidence verified; continuous arbitrary-traffic capture is not implemented |
 | FR-17 / FR-18 | Decision matrix, exact traffic windows, live readiness outage/recovery and drift-only exclusion | Implemented; real comparative labeled quality remains unavailable until a stable baseline is approved |
-| FR-19 to FR-21 | Explicit stable-target and recovery policy | Pending |
+| FR-19 to FR-21 | Recorded approved predecessor, shared deployment procedure, recovery probes and fresh Prometheus samples | Implemented; a live switch to an approved stable model remains unverified because none exists |
 
 `tests/test_data_validation.py` checks the validation contract using valid and
 invalid PNG/XML fixtures. `tests/test_restore.py` tests fresh-cache recovery with
@@ -1157,3 +1157,63 @@ The API passed a real prediction after restart, Prometheus reported the API up,
 and Grafana's database health check passed. Registry aliases remain empty.
 Next is Phase 11: rollback controls. Automatic rollback is not implemented by
 Phase 10, and a real quality comparison still requires an approved stable baseline.
+
+## Phase 11: bounded rollback controls
+
+`src/monitoring/rollback.py` performs one host-side health/recovery cycle. With a
+valid recorded target and fresh unhealthy evidence, it automatically calls the
+same `deploy()` procedure used by normal deployment. It does not assign registry
+aliases, promote a model, train, or install a scheduler. Run it explicitly:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.monitoring.rollback --output reports/rollback-check.json
+```
+
+An existing Phase 10 report can be supplied with `--decision`; it must still be
+fresh when consumed. Without that argument the controller collects current
+readiness and traffic evidence. Optional `--drift`, `--audit`, and
+`--latency-baseline` paths supply the other signals. Use a new output path for
+each call. The current project returns `unavailable` because no approved target
+was recorded for its experimental deployment; it leaves the API unchanged.
+
+Before normal deployment replaces an approved, ready predecessor, it verifies
+that predecessor against MLflow and records its numeric version, complete model
+manifest, immutable Docker image ID and loopback port. The target is written in a
+deployment intent before removal and attached to the candidate receipt. An
+experimental predecessor never becomes a rollback target. Stable promotion still
+requires separate review; before moving `stable`, preserve its numeric version as
+`previous_stable`. This phase never creates either alias automatically.
+
+At rollback, the recorded version must still be referenced by `stable` or
+`previous_stable`, and its artifact hashes must verify. Recovery restores the
+recorded inference settings and image, even if candidate configuration changed.
+The controller re-evaluates health evidence, checks model/container/process
+identity and expiry, then records a durable attempt before replacement. Drift
+alone, unknown health, stale evidence, missing targets and concurrent operations
+cannot initiate a switch. Normal deployment and rollback use the same local lock.
+
+Recovery requires three matching readiness responses spaced ten seconds apart,
+20 successful predictions on distinct existing validation images, and fresh
+Prometheus samples for the new container/model/settings identity. The final-test
+pool is excluded. `recovered` means operational recovery; it does not certify
+model quality. Failed or interrupted attempts remain recorded and are never
+automatically retried. The restored deployment receives no automatic target for
+another switch, preventing a loop between models.
+
+Files: `src/monitoring/rollback.py` contains the controller and recovery probes;
+`src/serving/deploy.py` adds predecessor capture, recorded-settings restoration,
+the shared lock, and atomic receipt publication; `src/monitoring/health.py` reads
+the deployed port from its receipt. `tests/test_rollback.py` exercises the decision,
+switch and recovery boundaries; `tests/test_tracking.py` verifies restoration and
+revoked approval against a disposable real MLflow registry. No dependencies,
+health thresholds, dataset files or serving API code were changed.
+
+Phase 11 local validation passed 53 tests in 36.690 seconds. Live checks exercised
+three readiness probes, twenty validation-image predictions and fresh Prometheus
+samples against the existing experimental service without switching it. The real
+controller refused rollback because no approved target exists. All 10,000 original
+file sizes/modification times and DVC status are unchanged; registry aliases remain
+empty. Evidence is in `reports/phase11-validation.json`,
+`reports/phase11-live-recovery-probes.json`, and `reports/phase11-no-approved-target.json`.
+A real approved-model rollback cannot be demonstrated with the current registry.
+Next is Phase 12: end-to-end validation, with that acceptance gap kept explicit.

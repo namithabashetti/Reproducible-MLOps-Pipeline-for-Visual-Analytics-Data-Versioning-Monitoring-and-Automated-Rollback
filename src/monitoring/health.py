@@ -286,6 +286,7 @@ def collect(project, policy, observations=3):
     config = yaml.safe_load((project / "configs/config.yaml").read_text())
     receipt_path = project / "artifacts/serving/deployment.json"
     receipt = json.loads(receipt_path.read_text())
+    serving_port = receipt.get("serving", config["serving"])["port"]
     identity = model_identity(receipt["model"])
     evidence = {"identity": identity, "deployment_id": receipt["container_id"], "readiness": [],
                 "hardware": {"host": platform.node(), "cpu": platform.processor(), "logical_cpus": os.cpu_count()},
@@ -306,7 +307,7 @@ def collect(project, policy, observations=3):
                 evidence["readiness"] = []
             evidence["runtime_started"] = started
             try:
-                response = session.get(f"http://127.0.0.1:{config['serving']['port']}/health", timeout=3)
+                response = session.get(f"http://127.0.0.1:{serving_port}/health", timeout=3)
                 ready = response.status_code == 200 and response.json() == {"status": "ready", **receipt["model"]}
             except (requests.RequestException, ValueError):
                 ready = False

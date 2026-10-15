@@ -149,6 +149,21 @@ class TrackingTests(unittest.TestCase):
         _, approved = stage_model(self.root, self.root)
         self.assertEqual(approved["model_version"], registered["model_version"])
         self.assertEqual(approved["deployment_mode"], "approved")
+        # Only the disposable registry is approved. Rollback restores its recorded settings.
+        config["serving"]["confidence"] = .6
+        config_path.write_text(yaml.safe_dump(config))
+        restored_path, restored = stage_model(self.root, self.root, registered["model_version"],
+                                             restore_manifest=approved)
+        self.assertEqual(restored["inference"]["confidence"], .25)
+        self.assertEqual(file_hash(restored_path / "best.pt"), registered["checkpoint_sha256"])
+        with self.assertRaisesRegex(ValueError, "does not match"):
+            stage_model(self.root, self.root, registered["model_version"],
+                        restore_manifest={**approved, "checkpoint_sha256": "wrong"})
+        client.delete_registered_model_alias(registered["model_name"], "stable")
+        with self.assertRaisesRegex(ValueError, "not referenced by stable"):
+            stage_model(self.root, self.root, registered["model_version"], restore_manifest=approved)
+        config["serving"]["confidence"] = .25
+        config_path.write_text(yaml.safe_dump(config))
         (staged / "best.pt").write_bytes(b"corrupt local copy")
         with self.assertRaisesRegex(ValueError, "staged checkpoint is corrupt"):
             stage_model(self.root, self.root, registered["model_version"], experimental=True)
