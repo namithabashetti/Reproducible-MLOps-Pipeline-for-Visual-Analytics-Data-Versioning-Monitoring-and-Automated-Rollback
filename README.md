@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 11 rollback controls passed all 53 local and GitHub CI tests, live recovery-probe checks, monitoring validation, and the CPU image build. The model remains experimental, with no approved rollback target.**
+**Current status: Phase 12 end-to-end validation is in progress. Phase 11 passed all 53 local and CI tests. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1222,3 +1222,34 @@ with locked dependency consistency, source compilation, monitoring configuration
 validation and the CPU Docker image build also successful. Deployment was `none`.
 A real approved-model rollback cannot be demonstrated with the current registry.
 Next is Phase 12: end-to-end validation, with that acceptance gap kept explicit.
+
+## Phase 12: repeatable acceptance validation
+
+Run the local API and monitoring containers, leave prediction traffic idle, then
+validate the existing pipeline with a new report directory:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/validate_pipeline.py --reference artifacts/monitoring/phase9/reference.json --output reports/phase12-live
+```
+
+The command checks the original dataset's content and metadata, clean DVC state,
+matching historical Drive recovery and preprocessing evidence, completed training
+lineage, MLflow metrics/artifacts and the deployed checkpoint. It then measures
+two consecutive 120-second windows: 110 validation-image predictions with three
+excluded client errors, followed by 250 reserved current-pool observations. It
+exports Evidently PSI/KS results, a measured latency baseline, labeled-audit
+availability, a fresh combined health decision and Grafana panel-query results.
+Normal-operation evidence must be rejected by the rollback decision gate.
+
+`validation.json` records current checks, historical evidence, acceptance gaps,
+source identity and preservation results. `completed_with_acceptance_gaps` means
+the validation finished; it does not mean every PRD criterion passed. Errors
+produce a failed report and nonzero exit. Use a new directory for every rerun.
+The script performs no training, remote transfer, model approval or deployment.
+It uses validation and reserved monitoring pools; it does not evaluate the final
+test pool. Saved health/drift evidence is only actionable within its freshness
+deadline.
+
+The existing Kaggle provenance gap and missing approved stable target remain
+explicit. Operational recovery probes and fixture-based switch tests do not
+establish a real approved-model rollback or post-rollback monitoring acceptance.

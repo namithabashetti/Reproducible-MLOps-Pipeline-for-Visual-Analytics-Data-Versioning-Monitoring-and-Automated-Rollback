@@ -801,3 +801,22 @@ with locked dependency consistency, compilation, monitoring configuration valida
 and the CPU image build successful. Deployment was `none`; the run did not replace
 the experimental API. The implementation is validated, with the real approved-model
 switch explicitly unverified until a reviewed target exists.
+
+## Phase 12: repeatable acceptance audit
+
+One project-specific command, `scripts/validate_pipeline.py`, composes the existing
+dataset, registry, serving, drift and health functions. It writes to a new directory
+under `reports/` and does not deploy, train or transfer data remotely. DVC and the
+original content are verified again; remote recovery and the full preprocessing
+audit are identified as historical evidence with matching current identities.
+
+The live path measures two qualifying traffic windows, exports a new current-pool
+Evidently report against the preserved reference, evaluates current health, checks
+that normal-operation evidence cannot authorize rollback, and queries every
+provisioned Grafana panel. Deployment receipt, Docker process start, registry aliases
+and original dataset metadata must stay unchanged throughout the check. The
+reported state is `completed_with_acceptance_gaps` when checks complete but
+provenance, stable quality or actual approved rollback evidence is missing.
+
+Phase 12 validation does not silently approve version 1 or invent a second model.
+Its live result and final acceptance table will be recorded after execution.
