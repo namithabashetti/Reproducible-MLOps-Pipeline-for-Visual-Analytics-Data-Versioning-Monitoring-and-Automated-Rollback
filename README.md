@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 10 health decisions, 39 local tests, and live failure/recovery checks passed; GitHub validation is pending.**
+**Current status: Phase 10 health decisions complete; all 39 local and GitHub CI tests, live failure/recovery checks, monitoring validation, and the CPU image build passed. The model remains experimental.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1137,8 +1137,23 @@ and correctly reported unknown with nonqualifying post-restart windows.
 
 `reports/phase10-live/` preserves normal/outage/recovery evidence;
 `reports/phase10-validation.json` records the phase checks and file inventory.
-`reports/phase10-drift/` contains the fresh distribution report. The full decision
+`reports/phase10-drift/` contains the distribution report collected for that test;
+saved reports are historical evidence after their freshness deadlines. The full decision
 matrix and available audit path use controlled fixtures; they do not establish a
 real stable-versus-candidate quality comparison. No approved stable model was
 invented. DVC status is unchanged, and all 10,000 original file sizes/modification
 times match the preserved dataset metadata.
+
+GitHub [run 38692757040](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38692757040)
+passed on October 15, 2026 for implementation commit
+`9f641efec87ddfe50e3d495c91e9d77632b18f68`: locked dependencies, source compilation,
+all 39 tests, monitoring configuration validation and the CPU Docker image build.
+Deployment was `none`, so the existing experimental serving container was retained.
+The first attempt ended during dependency installation after runner logs stopped
+abruptly; no test failure was recorded. The same commit passed on retry without a
+source change. The phase report preserves both attempts.
+
+The API passed a real prediction after restart, Prometheus reported the API up,
+and Grafana's database health check passed. Registry aliases remain empty.
+Next is Phase 11: rollback controls. Automatic rollback is not implemented by
+Phase 10, and a real quality comparison still requires an approved stable baseline.

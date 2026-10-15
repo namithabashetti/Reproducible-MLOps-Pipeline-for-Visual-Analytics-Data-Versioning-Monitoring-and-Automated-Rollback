@@ -725,5 +725,16 @@ exercise its implementation and input isolation without claiming real quality
 results. Evidence: `reports/phase10-validation.json` and `reports/phase10-live/`.
 DVC status and original file metadata are unchanged; no dependency or serving API
 code change required rebuilding data or replacing the serving image. GitHub
-validation for this phase will use deployment `none` and still run the existing
-locked-environment tests, monitoring checks and Docker build.
+run `38692757040` passed on October 15, 2026 against implementation commit
+`9f641efec87ddfe50e3d495c91e9d77632b18f68`, including all 39 tests, locked dependency
+consistency, source compilation, monitoring configuration validation and the CPU
+image build. Deployment was `none`; the existing experimental API was retained.
+Run `38603116145` had ended during dependency installation after the runner logs
+stopped abruptly. The exact interruption cause is unknown; the unchanged commit
+passed on retry. Both attempts are preserved in the local phase report.
+
+Post-restart service checks passed for a real API prediction, Prometheus target
+availability and Grafana database health. No registry alias was added. Saved live
+test decisions are historical evidence after expiry, not current health claims.
+Phase 10 is complete; Phase 11 will add rollback controls, with stable selection
+and real comparative quality still subject to the existing approval requirements.
