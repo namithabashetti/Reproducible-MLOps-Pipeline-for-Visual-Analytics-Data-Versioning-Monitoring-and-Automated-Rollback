@@ -915,3 +915,41 @@ The latter would support an operational MLOps demonstration, not establish full
 three-class model acceptance. No response or stable approval is inferred from
 elapsed time. Quality comparison, actual rollback and post-rollback monitoring
 remain unverified pending the required evidence and approval.
+
+## Full three-class requirement retained; correction schema 2
+
+The user explicitly selected "Keep the full three-class quality requirement".
+The limited-demonstration route is not approved. Continue the annotation audit,
+then isolated retraining and same-label comparative evaluation before stable
+approval and real rollback validation. Full model acceptance is not implied by
+the working operational pipeline or passing automated tests.
+
+Systematic visual review exposed a missing uncovered-head label in
+`hard_hat_workers1003`. Schema 2 therefore records explicit helmet, head and person
+box lists; it preserves correct source boxes while allowing reviewed corrections
+to any approved class. The exporter retains source identities and creates only
+derived outputs. It no longer copies redundant source XML files into the export.
+Three new tests verify head correction, all-class/schema validation, and policy
+hash consistency after Windows Git newline conversion. Policy text is hashed
+with normalized line endings; source image/XML bytes remain exact. All 67 local
+tests passed in 36.103 seconds.
+
+Mirror-boundary diagnosis also exposed four earlier reviewed boxes that crossed
+copies or used an inaccurate boundary. Those decisions were reopened and their
+history retained, with no export or training having occurred. The review now
+contains four reviewed images, 24 requiring adjudication and 3,972 pending.
+The schema-1 snapshot, source/policy hashes and review journal remain available
+under `reports/person-review-v1/`. The four accepted records were visually
+rechecked under schema 2; this remains assistant review, not independent expert
+validation or a completed annotation audit.
+
+Person-box suggestions from the already available pretrained checkpoint remain
+in a separate report file with their model/settings/image identities. They can
+reduce drawing work but do not set reviewed status or enter training labels.
+No new weights, dataset, service or external annotation platform was introduced.
+
+The suggestion pass completed for all 4,000 training/validation images without
+changing review status. A local DVC snapshot of six audit files records the
+current incomplete review, including its journal and the suggestion generator:
+`data/annotation-review.dvc`, MD5 `917cc6afc440a0f40fe31f6dd38b9b96.dir`.
+This snapshot is not a corrected training dataset and no remote upload occurred.

@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import yaml
 
-from scripts.review_annotations import check_review, digest, export_review, source_records
+from scripts.review_annotations import check_review, digest, export_review, policy_digest, source_records
 
 
 class AnnotationReviewTests(unittest.TestCase):
@@ -32,7 +32,7 @@ class AnnotationReviewTests(unittest.TestCase):
             "monitoring_reference": [], "monitoring_current": []}}))
         (self.project / "docs/annotation-policy.md").write_text("fixture policy")
         (self.project / "params.yaml").write_text("training:\n  image_size: 16\npreprocessing:\n  pad_value: 114\n")
-        self.review = {"schema_version": 1, "split_sha256": digest(self.project / "data/splits.json"),
+        self.review = {"schema_version": 2, "split_sha256": digest(self.project / "data/splits.json"),
                        "policy_sha256": digest(self.project / "docs/annotation-policy.md"),
                        "records": source_records(self.project)}
         self.output = self.project / "data/person-corrected-test"
@@ -110,6 +110,43 @@ class AnnotationReviewTests(unittest.TestCase):
                        self.project / "data/person-corrected-test/child"):
             with self.subTest(target=target), self.assertRaises(ValueError):
                 export_review(self.project, self.review, target)
+
+    def test_explicit_head_correction_exports_without_changing_source_xml(self):
+        self.reviewed()
+        row = self.review["records"][0]
+        row["head_boxes"] = [[10, 1, 14, 5]]
+        row["reason"] += "; missing uncovered head added after image review"
+        xml = self.project / "dataset/annotations/train1.xml"
+        original = xml.read_bytes()
+        export_review(self.project, self.review, self.output)
+        labels = (self.output / "labels/train/train1.txt").read_text().splitlines()
+        self.assertEqual(labels[1], "1 0.750000000 0.312500000 0.250000000 0.250000000")
+        self.assertEqual(xml.read_bytes(), original)
+        self.assertEqual(check_review(self.project, self.review)["changed_images"], 2)
+
+    def test_all_classes_are_validated_and_legacy_review_requires_reconciliation(self):
+        self.reviewed()
+        for field in ("helmet_boxes", "head_boxes", "person_boxes"):
+            copy = deepcopy(self.review)
+            copy["records"][0][field] = [[0, 0, 17, 12]]
+            with self.subTest(field=field), self.assertRaisesRegex(ValueError, "invalid"):
+                check_review(self.project, copy)
+            del copy["records"][0][field]
+            with self.assertRaisesRegex(ValueError, "must be a list"):
+                check_review(self.project, copy)
+        with self.assertRaisesRegex(ValueError, "schema"):
+            check_review(self.project, {**self.review, "schema_version": 1})
+
+    def test_policy_identity_survives_windows_git_newline_conversion(self):
+        self.reviewed()
+        path = self.project / "docs/annotation-policy.md"
+        path.write_bytes(b"first line\nsecond line\n")
+        self.review["policy_sha256"] = policy_digest(path)
+        path.write_bytes(b"first line\r\nsecond line\r\n")
+        self.assertTrue(check_review(self.project, self.review)["ready_for_export"])
+        path.write_bytes(b"changed line\r\nsecond line\r\n")
+        with self.assertRaisesRegex(ValueError, "policy_sha256"):
+            check_review(self.project, self.review)
 
 
 if __name__ == "__main__":

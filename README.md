@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Pipeline validation has 11 acceptance criteria verified, 2 partial, and 2 blocked. Person-label correction is in progress: 3 of 4,000 images have reviewed corrections, 9 have unresolved issues. All 64 local tests passed; the last completed CI run covered the preceding 58-test implementation. The model remains experimental, with no approved rollback target.**
+**Current status: Full three-class quality remains required. Annotation correction is in progress: 4 of 4,000 images have reviewed corrections, 24 have unresolved issues. All 67 local tests passed; the last completed CI run covered the preceding 58-test implementation. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1364,24 +1364,46 @@ alone is not an established fix, and the existing model remains experimental.
 The correction workflow is implemented in `scripts/review_annotations.py`, with
 the [annotation policy](docs/annotation-policy.md). It records the raw image/XML
 hashes, split and policy identities, person boxes, reviewer, timestamp and open
-issues. The original helmet/head labels are preserved. All 4,000 training and
+issues. Schema 2 permits explicit, image-reviewed corrections to all three
+classes after a missing uncovered-head label was found. All 4,000 training and
 validation records must be reviewed before an isolated corrected dataset can be
 exported; final-test and monitoring images are excluded from this review set.
 An incomplete, stale, invalid or unresolved review cannot become a training
 dataset. Export does not train, promote a model or change the current DVC pipeline.
 
-`reports/person-review-v1/review.json` currently contains 3 image/overlay-reviewed
-corrections, 9 additional images requiring adjudication of reflected/cropped
-fragments, and 3,988 pending records. The reviewer was Codex visual inspection,
+`reports/person-review-v1/review.json` currently contains 4 image/overlay-reviewed
+corrections, 24 images requiring adjudication of reflected/cropped fragments or
+occlusion, and 3,972 pending records. Four earlier accepted records were reopened
+after pixel-symmetry checks located mirror boundaries their boxes crossed. The
+schema-1 snapshot and review journal preserve the previous decisions. The
+remaining reviewed records were rechecked under the three-class policy; one
+includes a missing uncovered-head correction. The reviewer was Codex visual inspection,
 not an independent annotation team. These selected examples do not establish a
 dataset-wide correction rate. No corrected dataset has been exported, no new
 training has started, and no stable alias has been assigned.
 
-Six new tests check incomplete reviews, unresolved issues, source/policy/split
+Nine annotation-workflow tests check incomplete reviews, unresolved issues, source/policy/split
 changes, invalid boxes, review attribution, held-out injection, output isolation,
-and real conversion preserving source files and helmet boxes. All 64 local tests
-passed in 51.720 seconds. The raw metadata fingerprint remains unchanged and DVC
-status is clean. The completion-scope decision remains pending: retain full
-three-class quality acceptance, or explicitly approve the existing baseline only
-for a limited MLOps demonstration with its person limitation documented. No such
-approval is assumed. Neither path permits claiming a completed annotation audit.
+and real conversion preserving source files, explicit head corrections, and
+rejection of unreconciled legacy reviews, and policy identity across Git newline
+conversion. Policy text hashes normalize line endings; image/XML hashes remain
+byte-exact. All 67 local tests passed in 36.103 seconds. The user explicitly retained full three-class quality acceptance;
+the existing baseline is not approved for a limited demonstration. Corrected
+data review, isolated retraining, comparative evaluation, stable approval and
+actual rollback/post-rollback validation remain necessary.
+
+Generic-person suggestions use only the existing local pretrained YOLOv8n
+checkpoint, with separate report-local settings and CPU inference. They are
+saved in `reports/person-review-v1/model-suggestions.json`, never in reviewed
+labels. The checkpoint, image hashes and inference settings are recorded. No
+test or monitoring images are used. Suggestions and structural checks cannot
+establish that a complete, accurate annotation review has occurred.
+
+Suggestions now cover all 4,000 training/validation images. A six-file local DVC
+snapshot (`data/annotation-review.dvc`, MD5
+`917cc6afc440a0f40fe31f6dd38b9b96.dir`) preserves the review, policy, journal,
+suggestions, suggestion generator and explicit incomplete status. It is **not
+training data** and is not referenced by the training pipeline. The snapshot is
+in the local DVC cache; this step did not push it to Google Drive. The working
+review remains under `reports/person-review-v1/`. Retain old snapshots and update
+the DVC review snapshot as further decisions are made.

@@ -1,4 +1,4 @@
-"""Review person corrections separately from immutable source annotations."""
+"""Review three-class corrections separately from immutable source annotations."""
 
 import argparse
 from collections import Counter
@@ -23,6 +23,11 @@ def digest(path):
     return sha256(path.read_bytes()).hexdigest()
 
 
+def policy_digest(path):
+    # Git may check out Markdown with CRLF on Windows; the policy text is identical.
+    return sha256(path.read_text(encoding="utf-8").encode("utf-8")).hexdigest()
+
+
 def source_records(project):
     manifest = json.loads((project / "data/splits.json").read_text())
     all_names = [name for names in manifest["splits"].values() for name in names]
@@ -41,7 +46,8 @@ def source_records(project):
             records.append({
                 "image_id": name, "split": split, "size": list(size),
                 "image_sha256": digest(image_path), "xml_sha256": digest(xml_path),
-                "person_boxes": [list(box) for label, box in objects if label == "person"],
+                **{f"{kind}_boxes": [list(box) for label, box in objects if label == kind]
+                   for kind in ("helmet", "head", "person")},
                 "status": "pending", "reviewer": "", "reviewed_at": "",
                 "reason": "", "issues": [],
             })
@@ -49,11 +55,12 @@ def source_records(project):
 
 
 def check_review(project, review):
-    if review.get("schema_version") != 1:
+    if review.get("schema_version") != 2:
         raise ValueError("Unsupported review schema")
     for field, path in (("split_sha256", "data/splits.json"),
                         ("policy_sha256", "docs/annotation-policy.md")):
-        if review.get(field) != digest(project / path):
+        actual = policy_digest(project / path) if field == "policy_sha256" else digest(project / path)
+        if review.get(field) != actual:
             raise ValueError(f"Changed {field}; review must be reconciled")
     expected = source_records(project)
     rows = review["records"]
@@ -81,20 +88,22 @@ def check_review(project, review):
             if stamp.utcoffset() != timezone.utc.utcoffset(stamp) or stamp > datetime.now(timezone.utc):
                 raise ValueError("Review time must be UTC and cannot be in the future")
         width, height = source["size"]
-        boxes = row.get("person_boxes")
-        if not isinstance(boxes, list):
-            raise ValueError("Person boxes must be a list")
-        seen = set()
-        for box in boxes:
-            if (not isinstance(box, list) or len(box) != 4 or
-                any(type(value) not in (float, int) or not math.isfinite(value) for value in box)):
-                raise ValueError(f"{source['image_id']}: box must contain four finite coordinates")
-            x1, y1, x2, y2 = box
-            if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height) or tuple(box) in seen:
-                raise ValueError(f"{source['image_id']}: invalid or duplicate person box")
-            seen.add(tuple(box))
+        fields = ("helmet_boxes", "head_boxes", "person_boxes")
+        for field in fields:
+            boxes = row.get(field)
+            if not isinstance(boxes, list):
+                raise ValueError(f"{source['image_id']}: {field} must be a list")
+            seen = set()
+            for box in boxes:
+                if (not isinstance(box, list) or len(box) != 4 or
+                    any(type(value) not in (float, int) or not math.isfinite(value) for value in box)):
+                    raise ValueError(f"{source['image_id']}: box must contain four finite coordinates")
+                x1, y1, x2, y2 = box
+                if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height) or tuple(box) in seen:
+                    raise ValueError(f"{source['image_id']}: invalid or duplicate {field}")
+                seen.add(tuple(box))
         counts[status] += 1
-        changed += boxes != source["person_boxes"]
+        changed += any(row[field] != source[field] for field in fields)
     return {"images": len(rows), "status_counts": dict(counts), "changed_images": changed,
             "ready_for_export": bool(rows) and counts["reviewed"] == len(rows)}
 
@@ -121,13 +130,7 @@ def export_review(project, review, output):
         image_bytes, xml_bytes = image_path.read_bytes(), xml_path.read_bytes()
         if sha256(image_bytes).hexdigest() != row["image_sha256"] or sha256(xml_bytes).hexdigest() != row["xml_sha256"]:
             raise ValueError("Source changed during export; partial output is not ready")
-        # Snapshot XML inside the candidate so conversion uses exactly the verified bytes.
-        snapshot = output / "source_annotations" / f"{name}.xml"
-        snapshot.parent.mkdir(exist_ok=True)
-        snapshot.write_bytes(xml_bytes)
-        objects = [(label, box) for label, box in read_annotation(snapshot, tuple(row["size"]), set(classes))
-                   if label != "person"]
-        objects += [("person", box) for box in row["person_boxes"]]
+        objects = [(label, box) for label in classes for box in row[f"{label}_boxes"]]
         image = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
         if image is None or (image.shape[1], image.shape[0]) != tuple(row["size"]):
             raise ValueError("Image cannot be decoded at its recorded dimensions")
@@ -164,8 +167,8 @@ def main():
         if args.command == "init":
             if folder.exists():
                 raise FileExistsError("Review destination already exists")
-            review = {"schema_version": 1, "split_sha256": digest(project / "data/splits.json"),
-                      "policy_sha256": digest(project / "docs/annotation-policy.md"),
+            review = {"schema_version": 2, "split_sha256": digest(project / "data/splits.json"),
+                      "policy_sha256": policy_digest(project / "docs/annotation-policy.md"),
                       "records": source_records(project)}
             folder.mkdir(parents=True)
             path.write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")

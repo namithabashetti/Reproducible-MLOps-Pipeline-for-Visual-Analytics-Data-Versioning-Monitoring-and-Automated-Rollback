@@ -1,4 +1,4 @@
-# Person annotation correction policy, version 1
+# Three-class annotation correction policy, version 2
 
 This policy governs a separate derived correction set. The original annotation
 guidelines are unknown. It defines the intended visible-person task without
@@ -15,9 +15,12 @@ claiming to recover the original annotator's intent.
   images. A separately visible reflected person can need a separate box. Do not
   merge two copies into one person. Mark uncertain fragments for adjudication;
   an unresolved image cannot count as reviewed or enter the corrected export.
-- Keep existing helmet/head labels unchanged in this person-only correction.
-  Flag visibly incorrect helmet/head labels for adjudication rather than claim
-  the resulting three-class ground truth is complete.
+- Initialize helmet/head boxes from the supplied annotations, then review all
+  three classes. Preserve correct boxes and explicitly record any correction in
+  the reason. Helmet annotations retain the source convention of enclosing the
+  helmeted head; head denotes an uncovered head. Do not label a helmeted head as
+  both helmet and head. Person boxes can contain these independently nested boxes.
+  Uncertain class identity or boundaries require adjudication.
 - Review proposed boxes against the actual image. Model outputs may prioritize
   inspection, but cannot automatically become reviewed ground truth. Record the
   reviewer, UTC review time, and reason, including for an unchanged/empty result.
@@ -50,10 +53,18 @@ Actual approved-model rollback and post-rollback monitoring remain required.
 .\.venv\Scripts\python.exe -m scripts.review_annotations export --review reports/person-review-v1 --output data/person-corrected-v1
 ```
 
-`review.json` starts with the supplied person boxes as **pending**, not verified.
-Edit `person_boxes`, `status` (`pending`, `needs_adjudication`, or `reviewed`),
+`review.json` schema 2 starts with supplied boxes for all classes as **pending**.
+Edit `helmet_boxes`, `head_boxes`, `person_boxes`, `status` (`pending`,
+`needs_adjudication`, or `reviewed`),
 `reviewer`, `reviewed_at`, `reason`, and `issues` for each image. Reviewed records
 require a UTC ISO timestamp and an empty issues list. Do not edit source identity
 fields. `check` returns exit code 2 for an incomplete review and 1 for invalid
 records. Export rejects incomplete reviews, existing destinations, and paths
 outside a new `data/person-corrected-*` directory.
+
+Version 2 permits reviewed head/helmet corrections after an uncovered-head
+omission was found during the person audit. A version-1 record cannot be silently
+treated as a version-2 review: retain the old snapshot, copy source head/helmet
+boxes explicitly, update the policy fingerprint, and recheck all previously
+reviewed images under the expanded class review. No model predictions may perform
+this migration's visual review.
