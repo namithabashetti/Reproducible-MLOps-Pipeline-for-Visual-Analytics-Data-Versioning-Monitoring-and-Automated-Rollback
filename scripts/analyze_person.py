@@ -102,7 +102,9 @@ def analyze(project, output):
             'person_min_side_under32': sum(v < 32 for v in person_sizes)}
 
     # All settings/cache directories stay in the report directory; predict() does not write label caches.
-    os.environ.update(YOLO_CONFIG_DIR=str(output / 'ultralytics-settings'), YOLO_OFFLINE='true', YOLO_AUTOINSTALL='false')
+    settings_directory = output / 'ultralytics-settings'
+    settings_directory.mkdir(parents=True, exist_ok=True)
+    os.environ.update(YOLO_CONFIG_DIR=str(settings_directory), YOLO_OFFLINE='true', YOLO_AUTOINSTALL='false')
     import torch
     from ultralytics import YOLO, settings
     settings.update({'sync': False})
