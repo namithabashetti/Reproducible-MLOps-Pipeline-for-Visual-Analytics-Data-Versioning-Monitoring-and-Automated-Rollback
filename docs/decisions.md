@@ -953,3 +953,28 @@ changing review status. A local DVC snapshot of six audit files records the
 current incomplete review, including its journal and the suggestion generator:
 `data/annotation-review.dvc`, MD5 `917cc6afc440a0f40fe31f6dd38b9b96.dir`.
 This snapshot is not a corrected training dataset and no remote upload occurred.
+
+## Continued annotation adjudication: 14 reviewed images
+
+Enlarged raw images and corrected all-class overlays resolved nine earlier
+ambiguous records and one newly inspected record. Person boxes now separate
+copies at the visually checked mirror boundaries. Several helmet boxes were
+tightened and omitted cropped helmets added; helmet-only fragments were not
+automatically treated as people. Each decision retains its prior record in the
+review journal. Seven other newly inspected crowded or fragmented scenes remain
+unresolved, with specific instance/class questions recorded rather than guessed.
+
+The review contains 14 reviewed, 22 requiring adjudication and 3,964 pending
+images. These are assistant visual reviews, not independent expert validation.
+The source/policy/split/coordinate checks pass, and an actual attempted export
+still refuses the incomplete review without creating a destination. Raw dataset
+metadata and the baseline checkpoint match their previous hashes. Source code
+did not change; the prior 67-test local result is retained, not represented as
+a new test or CI run.
+
+The six-file local DVC review snapshot is now
+`8dee5ca31b8114ecd6c0ece67eb379f9.dir`. The earlier snapshot remains in local
+DVC history. No remote data transfer, corrected dataset export, training, stable
+promotion, final-test prediction or actual rollback occurred. Full three-class
+quality and the remaining acceptance evidence are still required. Detailed
+checks are recorded in `reports/annotation-adjudication-validation.json`.

@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Full three-class quality remains required. Annotation correction is in progress: 4 of 4,000 images have reviewed corrections, 24 have unresolved issues. All 67 local tests passed; the last completed CI run covered the preceding 58-test implementation. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
+**Current status: Full three-class quality remains required. Annotation correction is in progress: 14 of 4,000 images have reviewed corrections, 22 have unresolved issues. All 67 local tests passed; the last completed CI run covered the preceding 58-test implementation. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1371,13 +1371,17 @@ exported; final-test and monitoring images are excluded from this review set.
 An incomplete, stale, invalid or unresolved review cannot become a training
 dataset. Export does not train, promote a model or change the current DVC pipeline.
 
-`reports/person-review-v1/review.json` currently contains 4 image/overlay-reviewed
-corrections, 24 images requiring adjudication of reflected/cropped fragments or
-occlusion, and 3,972 pending records. Four earlier accepted records were reopened
+`reports/person-review-v1/review.json` currently contains 14 image/overlay-reviewed
+corrections, 22 images requiring adjudication of reflected/cropped fragments or
+occlusion, and 3,964 pending records. Four earlier accepted records were reopened
 after pixel-symmetry checks located mirror boundaries their boxes crossed. The
 schema-1 snapshot and review journal preserve the previous decisions. The
 remaining reviewed records were rechecked under the three-class policy; one
-includes a missing uncovered-head correction. The reviewer was Codex visual inspection,
+includes a missing uncovered-head correction. A subsequent batch resolved nine
+earlier ambiguous images and accepted one newly inspected image. Those corrections
+separate mirrored people, tighten helmeted-head boxes and add omitted cropped
+helmets. Seven other newly inspected images retain explicit open issues.
+The reviewer was Codex visual inspection,
 not an independent annotation team. These selected examples do not establish a
 dataset-wide correction rate. No corrected dataset has been exported, no new
 training has started, and no stable alias has been assigned.
@@ -1401,7 +1405,7 @@ establish that a complete, accurate annotation review has occurred.
 
 Suggestions now cover all 4,000 training/validation images. A six-file local DVC
 snapshot (`data/annotation-review.dvc`, MD5
-`917cc6afc440a0f40fe31f6dd38b9b96.dir`) preserves the review, policy, journal,
+`8dee5ca31b8114ecd6c0ece67eb379f9.dir`) preserves the review, policy, journal,
 suggestions, suggestion generator and explicit incomplete status. It is **not
 training data** and is not referenced by the training pipeline. The snapshot is
 in the local DVC cache; this step did not push it to Google Drive. The working
