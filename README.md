@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Pipeline validation has 11 acceptance criteria verified, 2 partial, and 2 blocked. The person-class follow-up found incomplete annotations; all 58 current CI tests passed. The model remains experimental, with no approved rollback target.**
+**Current status: Pipeline validation has 11 acceptance criteria verified, 2 partial, and 2 blocked. Person-label correction is in progress: 3 of 4,000 images have reviewed corrections, 9 have unresolved issues. All 64 local tests passed; the last completed CI run covered the preceding 58-test implementation. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1358,3 +1358,30 @@ The next step is a consistent annotation-completeness audit and a separate,
 reviewed DVC version of derived labels before a new training experiment. Preserve
 the original snapshot and split membership. A threshold reduction or more epochs
 alone is not an established fix, and the existing model remains experimental.
+
+## Reviewed person-label corrections
+
+The correction workflow is implemented in `scripts/review_annotations.py`, with
+the [annotation policy](docs/annotation-policy.md). It records the raw image/XML
+hashes, split and policy identities, person boxes, reviewer, timestamp and open
+issues. The original helmet/head labels are preserved. All 4,000 training and
+validation records must be reviewed before an isolated corrected dataset can be
+exported; final-test and monitoring images are excluded from this review set.
+An incomplete, stale, invalid or unresolved review cannot become a training
+dataset. Export does not train, promote a model or change the current DVC pipeline.
+
+`reports/person-review-v1/review.json` currently contains 3 image/overlay-reviewed
+corrections, 9 additional images requiring adjudication of reflected/cropped
+fragments, and 3,988 pending records. The reviewer was Codex visual inspection,
+not an independent annotation team. These selected examples do not establish a
+dataset-wide correction rate. No corrected dataset has been exported, no new
+training has started, and no stable alias has been assigned.
+
+Six new tests check incomplete reviews, unresolved issues, source/policy/split
+changes, invalid boxes, review attribution, held-out injection, output isolation,
+and real conversion preserving source files and helmet boxes. All 64 local tests
+passed in 51.720 seconds. The raw metadata fingerprint remains unchanged and DVC
+status is clean. The completion-scope decision remains pending: retain full
+three-class quality acceptance, or explicitly approve the existing baseline only
+for a limited MLOps demonstration with its person limitation documented. No such
+approval is assumed. Neither path permits claiming a completed annotation audit.

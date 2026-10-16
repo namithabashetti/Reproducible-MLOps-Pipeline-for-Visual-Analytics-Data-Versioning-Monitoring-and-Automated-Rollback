@@ -1,6 +1,7 @@
 # Dataset bytes are managed by DVC, never Git.
 /dataset/
 /data/processed/
+/data/person-corrected-*/
 /artifacts/
 /reports/
 /runs/

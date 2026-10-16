@@ -890,3 +890,28 @@ checks passed for the unchanged experimental deployment. The diagnostic summary,
 visual review, preservation checks, draft annotation policy and CI evidence are
 recorded in `reports/person-analysis-validation.json` and
 `reports/person-analysis-v2/`. No label correction or stable approval was applied.
+
+## Traceable correction review and completion scope
+
+The request to finish the remaining work authorizes progressing the annotation
+correction workflow. `docs/annotation-policy.md` now defines a visible-person
+review with source hashes, fixed splits and explicit unresolved-fragment handling.
+The review set covers every training/validation image; raw files and held-out
+pools remain protected. `scripts/review_annotations.py` only exports a separate
+candidate after every record has reviewed status and no open issues. It does not
+alter training inputs, DVC stages, registry aliases or the running deployment.
+
+The first three corrected boxes were inspected on raw images and overlays by
+Codex. Nine other known omissions have unresolved fragment issues; 3,988 records
+remain pending. This is a partial review, not a completed corrected dataset.
+All 64 local tests passed (six new annotation-workflow tests). Raw metadata and
+DVC state remain unchanged. The previous successful CI evidence still applies
+to the preceding implementation, not these new source files.
+
+A scope question was presented because the existing model has not passed
+three-class quality review: continue full annotation correction and retraining,
+or explicitly accept the existing model as a limited demonstration baseline.
+The latter would support an operational MLOps demonstration, not establish full
+three-class model acceptance. No response or stable approval is inferred from
+elapsed time. Quality comparison, actual rollback and post-rollback monitoring
+remain unverified pending the required evidence and approval.

@@ -1,0 +1,186 @@
+"""Review person corrections separately from immutable source annotations."""
+
+import argparse
+from collections import Counter
+from datetime import datetime, timezone
+from hashlib import sha256
+import json
+import math
+from pathlib import Path
+import re
+import shutil
+
+import cv2
+import numpy as np
+from PIL import Image
+import yaml
+
+from src.data.preprocess import letterbox, yolo_labels
+from src.data.validate import read_annotation
+
+
+def digest(path):
+    return sha256(path.read_bytes()).hexdigest()
+
+
+def source_records(project):
+    manifest = json.loads((project / "data/splits.json").read_text())
+    all_names = [name for names in manifest["splits"].values() for name in names]
+    if len(all_names) != len(set(all_names)):
+        raise ValueError("Split membership overlaps")
+    records = []
+    for split in ("train", "validation"):
+        for name in sorted(manifest["splits"][split]):
+            if not re.fullmatch(r"[A-Za-z0-9_-]+", name):
+                raise ValueError("Unsafe image name")
+            image_path = project / "dataset/images" / f"{name}.png"
+            xml_path = project / "dataset/annotations" / f"{name}.xml"
+            with Image.open(image_path) as image:
+                size = image.size
+            objects = read_annotation(xml_path, size, {"helmet", "head", "person"})
+            records.append({
+                "image_id": name, "split": split, "size": list(size),
+                "image_sha256": digest(image_path), "xml_sha256": digest(xml_path),
+                "person_boxes": [list(box) for label, box in objects if label == "person"],
+                "status": "pending", "reviewer": "", "reviewed_at": "",
+                "reason": "", "issues": [],
+            })
+    return records
+
+
+def check_review(project, review):
+    if review.get("schema_version") != 1:
+        raise ValueError("Unsupported review schema")
+    for field, path in (("split_sha256", "data/splits.json"),
+                        ("policy_sha256", "docs/annotation-policy.md")):
+        if review.get(field) != digest(project / path):
+            raise ValueError(f"Changed {field}; review must be reconciled")
+    expected = source_records(project)
+    rows = review["records"]
+    if len(rows) != len(expected) or len({r["image_id"] for r in rows}) != len(rows):
+        raise ValueError("Review must contain every training/validation image exactly once")
+    by_name = {r["image_id"]: r for r in rows}
+    counts = Counter()
+    changed = 0
+    for source in expected:
+        row = by_name.get(source["image_id"])
+        if row is None or any(row.get(key) != source[key] for key in
+                              ("image_id", "split", "size", "image_sha256", "xml_sha256")):
+            raise ValueError(f"Source identity mismatch: {source['image_id']}")
+        status = row.get("status")
+        if status not in {"pending", "needs_adjudication", "reviewed"}:
+            raise ValueError(f"Invalid review status: {source['image_id']}")
+        if not isinstance(row.get("issues"), list) or any(
+                not isinstance(issue, str) or not issue.strip() for issue in row["issues"]):
+            raise ValueError("Issues must be a list of nonempty strings")
+        if status == "reviewed":
+            if row["issues"] or any(not isinstance(row.get(key), str) or not row[key].strip()
+                                    for key in ("reviewer", "reason", "reviewed_at")):
+                raise ValueError("Reviewed records require reviewer, time, reason and no open issues")
+            stamp = datetime.fromisoformat(row["reviewed_at"].replace("Z", "+00:00"))
+            if stamp.utcoffset() != timezone.utc.utcoffset(stamp) or stamp > datetime.now(timezone.utc):
+                raise ValueError("Review time must be UTC and cannot be in the future")
+        width, height = source["size"]
+        boxes = row.get("person_boxes")
+        if not isinstance(boxes, list):
+            raise ValueError("Person boxes must be a list")
+        seen = set()
+        for box in boxes:
+            if (not isinstance(box, list) or len(box) != 4 or
+                any(type(value) not in (float, int) or not math.isfinite(value) for value in box)):
+                raise ValueError(f"{source['image_id']}: box must contain four finite coordinates")
+            x1, y1, x2, y2 = box
+            if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height) or tuple(box) in seen:
+                raise ValueError(f"{source['image_id']}: invalid or duplicate person box")
+            seen.add(tuple(box))
+        counts[status] += 1
+        changed += boxes != source["person_boxes"]
+    return {"images": len(rows), "status_counts": dict(counts), "changed_images": changed,
+            "ready_for_export": bool(rows) and counts["reviewed"] == len(rows)}
+
+
+def export_review(project, review, output):
+    output = output.resolve()
+    if output.parent != (project / "data").resolve() or not re.fullmatch(
+            r"person-corrected-[A-Za-z0-9_-]+", output.name):
+        raise ValueError("Output must be a new data/person-corrected-* directory")
+    if output.exists():
+        raise FileExistsError("Export destination already exists")
+    result = check_review(project, review)
+    if not result["ready_for_export"]:
+        raise ValueError("Review is incomplete; no candidate dataset was exported")
+    params = yaml.safe_load((project / "params.yaml").read_text())
+    size, padding = params["training"]["image_size"], params["preprocessing"]["pad_value"]
+    classes = {"helmet": 0, "head": 1, "person": 2}
+    # Recheck the same bytes consumed by conversion, not just the earlier scan.
+    output.mkdir()
+    for row in review["records"]:
+        name, split = row["image_id"], row["split"]
+        image_path = project / "dataset/images" / f"{name}.png"
+        xml_path = project / "dataset/annotations" / f"{name}.xml"
+        image_bytes, xml_bytes = image_path.read_bytes(), xml_path.read_bytes()
+        if sha256(image_bytes).hexdigest() != row["image_sha256"] or sha256(xml_bytes).hexdigest() != row["xml_sha256"]:
+            raise ValueError("Source changed during export; partial output is not ready")
+        # Snapshot XML inside the candidate so conversion uses exactly the verified bytes.
+        snapshot = output / "source_annotations" / f"{name}.xml"
+        snapshot.parent.mkdir(exist_ok=True)
+        snapshot.write_bytes(xml_bytes)
+        objects = [(label, box) for label, box in read_annotation(snapshot, tuple(row["size"]), set(classes))
+                   if label != "person"]
+        objects += [("person", box) for box in row["person_boxes"]]
+        image = cv2.imdecode(np.frombuffer(image_bytes, dtype=np.uint8), cv2.IMREAD_COLOR)
+        if image is None or (image.shape[1], image.shape[0]) != tuple(row["size"]):
+            raise ValueError("Image cannot be decoded at its recorded dimensions")
+        padded, transform = letterbox(image, size, padding)
+        for folder in ("images", "labels"):
+            (output / folder / split).mkdir(parents=True, exist_ok=True)
+        if not cv2.imwrite(str(output / "images" / split / f"{name}.png"), padded,
+                           [cv2.IMWRITE_PNG_COMPRESSION, 3]):
+            raise OSError("Cannot write candidate image")
+        (output / "labels" / split / f"{name}.txt").write_text(
+            yolo_labels(objects, classes, transform, size), encoding="utf-8")
+    # This file is written last; interrupted exports cannot be selected as datasets.
+    (output / "review.json").write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
+    (output / "dataset.yaml").write_text(yaml.safe_dump({
+        "train": "images/train", "val": "images/validation", "names": {v: k for k, v in classes.items()}
+    }, sort_keys=False), encoding="utf-8")
+    return result
+
+
+def main():
+    parser = argparse.ArgumentParser(description=__doc__)
+    parser.add_argument("command", choices=("init", "check", "export"))
+    parser.add_argument("--review", required=True, type=Path)
+    parser.add_argument("--output", type=Path)
+    args = parser.parse_args()
+    project = Path(__file__).resolve().parents[1]
+    folder = args.review.resolve()
+    if not folder.is_relative_to(project / "reports") or folder == project / "reports":
+        parser.error("Review must be in a separate directory under reports")
+    if args.command == "export" and args.output is None:
+        parser.error("export requires --output")
+    try:
+        path = folder / "review.json"
+        if args.command == "init":
+            if folder.exists():
+                raise FileExistsError("Review destination already exists")
+            review = {"schema_version": 1, "split_sha256": digest(project / "data/splits.json"),
+                      "policy_sha256": digest(project / "docs/annotation-policy.md"),
+                      "records": source_records(project)}
+            folder.mkdir(parents=True)
+            path.write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
+            shutil.copy2(project / "docs/annotation-policy.md", folder / "policy.md")
+            print(json.dumps({"images": len(review["records"]), "status": "pending"}))
+            return
+        review = json.loads(path.read_text(encoding="utf-8"))
+        result = (export_review(project, review, args.output) if args.command == "export"
+                  else check_review(project, review))
+        print(json.dumps(result, indent=2))
+        if not result["ready_for_export"]:
+            raise SystemExit(2)
+    except (ValueError, OSError, KeyError, TypeError) as exc:
+        parser.exit(1, f"Annotation review failed: {exc}\n")
+
+
+if __name__ == "__main__":
+    main()
