@@ -845,3 +845,48 @@ compilation, monitoring configuration validation and the CPU image build.
 Deployment was `none`. Final container checks showed the existing API healthy
 and Prometheus/Grafana running. The validation phase is complete with the stated
 acceptance gaps; full project acceptance remains incomplete.
+
+## Person-class follow-up: annotation completeness before retraining
+
+On October 16, 2026, `scripts/analyze_person.py` ran the existing baseline on all
+500 validation images at confidence floor .001 and recorded diagnostic IoU50
+matches across fixed cutoffs. It reads train/validation label statistics, uses CPU
+inference, and excludes final-test and monitoring pools. The recorded Ultralytics
+AP remains the model-selection metric; these counts diagnose failure modes.
+
+The dataset supplies 472 person training boxes in 110 images, versus 13,304 helmet
+and 3,902 head boxes. Validation supplies 118 person boxes in 16 images. At .25,
+zero person predictions matched a supplied label; at .01, 35 matched and 1,149
+were unmatched. All six highest-confidence person-negative validation images have
+visible people but no person objects in their raw XML. Selected training examples
+show analogous omissions. This establishes concrete annotation-completeness issues,
+not their dataset-wide rate or a proven causal effect on model training.
+The original annotation guidelines are unknown. The completeness review assumes
+a consistent visible-person detection task; it does not establish the original
+annotator's intent or authorize automatic relabeling.
+
+Unmatched predictions are false positives against the supplied annotations; they
+must not all be described as actual false alarms. Model scores remain weak, but
+person precision cannot be interpreted as visual correctness without consistent
+ground truth. No score threshold was changed to conceal the issue. No detection
+cap was hit, and only three labeled validation person boxes have minimum side
+below 16 pixels, so those observations do not support treating cap/size changes as
+the primary correction.
+
+The initial settings fallback was corrected by creating the report-local settings
+directory before import. The task-generated workspace settings were moved into
+the first report for audit. A clean-commit rerun produced byte-identical prediction
+observations. Raw file metadata, DVC state, checkpoint bytes and registry aliases
+were preserved. Five diagnostic matching tests and the 58-test local suite passed.
+The next intervention is a documented annotation policy and a separate reviewed
+derived-label version, followed by an isolated training candidate. Existing raw
+data, split membership and experimental-model approval status remain protected.
+
+GitHub run `38860292983` passed on October 16, 2026 against implementation commit
+`c14683d5f47dd9014ec15b9d6d20e406a2c1f197`. All 58 tests passed in 195.586 seconds;
+dependency consistency, compilation, monitoring configuration validation and the
+CPU Docker build also passed. Deployment was `none`. Final serving/monitoring
+checks passed for the unchanged experimental deployment. The diagnostic summary,
+visual review, preservation checks, draft annotation policy and CI evidence are
+recorded in `reports/person-analysis-validation.json` and
+`reports/person-analysis-v2/`. No label correction or stable approval was applied.

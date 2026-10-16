@@ -4,12 +4,12 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Phase 12 validation completed with 11 acceptance criteria verified, 2 partial, and 2 blocked. All 53 CI tests, monitoring checks and the CPU image build passed. The model remains experimental, with no approved rollback target.**
+**Current status: Pipeline validation has 11 acceptance criteria verified, 2 partial, and 2 blocked. The person-class follow-up found incomplete annotations; all 58 current CI tests passed. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
 raw bytes/modification times unchanged and no candidate group crossing splits.
-Evidence: `reports/phase3-validation.json`; all 39 current tests passed locally.
+Evidence: `reports/phase3-validation.json`; the latest diagnostic extension passed all 58 tests locally.
 Google Drive remains the default DVC remote, with full raw-dataset recovery
 verified in `reports/gdrive-restore.json`. Derived outputs are cached locally.
 B2 is retained as a legacy remote with incomplete recovery evidence.
@@ -1291,3 +1291,70 @@ compilation, monitoring configuration validation and the CPU Docker image build
 also passed. Deployment was `none`. The API, Prometheus and Grafana containers
 were running at the final check. The documentation follow-up records these results
 without changing the validated implementation.
+
+## Person-class annotation and prediction audit
+
+The follow-up audit used the existing baseline on the 500-image validation pool
+and label statistics from train/validation only. It used no final-test predictions,
+new training, label edits, threshold changes or stable promotion. Reproduce it with:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/analyze_person.py --output reports/person-analysis-new
+```
+
+There are 472 person boxes among 17,678 training boxes (2.67%), present in 110 of
+3,500 training images. Validation has 118 person boxes across only 16 of 500 images.
+At the serving confidence of 0.25, diagnostic IoU50 matching found zero correct
+person predictions, one unmatched prediction and 118 missed labels. Lowering the
+cutoff to 0.01 found 35 correct matches but 1,149 unmatched predictions. These are
+confidence-ordered diagnostic counts; they do not replace Ultralytics AP.
+
+| Person confidence cutoff | Matched predictions | Unmatched predictions | Missed labels |
+| --- | ---: | ---: | ---: |
+| 0.001 | 78 | 7,611 | 40 |
+| 0.01 | 35 | 1,149 | 83 |
+| 0.05 | 1 | 30 | 117 |
+| 0.10 | 0 | 11 | 118 |
+| 0.25 | 0 | 1 | 118 |
+
+Visual review also found incomplete person annotations. The six highest-confidence
+person-negative validation examples contain visible people but only helmet objects
+in their source XML. `hard_hat_workers3219`, for example, has a person prediction
+at confidence 0.408 but no person ground truth. Reviewed training examples also
+contain visible bodies/upper bodies without person labels. The omissions exist in
+the raw XML; preprocessing preserves them. Therefore, unmatched predictions under
+these labels are not necessarily false alarms in the image. This selected review
+does not estimate the dataset-wide missing-label rate.
+The original annotation guidelines are unavailable; the completeness assessment
+uses the ordinary interpretation of detecting every clearly visible person, rather
+than claiming to know the original dataset's annotation intent.
+
+Only three of the 118 labeled validation person boxes have a minimum side below
+16 pixels at 416 resolution; no validation image hit the 300-detection cap. Among
+the 118 person boxes, 78 had an overlapping person candidate only below 0.25,
+eight had an overlapping other-class candidate, and 32 had no retained candidate
+at IoU50. Per-box coverage is not a one-to-one recall metric.
+
+The first run exposed a settings-directory fallback to a new workspace folder.
+That generated folder was preserved inside the ignored report directory; the
+script now creates its isolated settings directory before importing Ultralytics.
+The corrected run produced byte-identical observations. Raw metadata, checkpoint
+bytes, DVC outputs and registry aliases were preserved.
+
+Evidence: `reports/person-analysis-v2/summary.json`, `observations.json`,
+`annotation-review.json`, `person-missing-label-examples.png`, and
+`training-label-review.png`. Five new tests cover diagnostic matching; all 58 local
+tests passed. GitHub [run 38860292983](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/38860292983)
+passed on October 16, 2026 against implementation commit
+`c14683d5f47dd9014ec15b9d6d20e406a2c1f197`: all 58 tests passed in 195.586 seconds,
+along with dependency consistency, compilation, monitoring validation and the CPU
+image build. Deployment was `none`. Final API prediction, Prometheus target and
+Grafana health checks passed; registry aliases remain empty.
+The draft next-step policy is in
+`reports/person-analysis-v2/proposed-annotation-policy.md`; no corrected-label
+version has been created or approved by this diagnostic run.
+
+The next step is a consistent annotation-completeness audit and a separate,
+reviewed DVC version of derived labels before a new training experiment. Preserve
+the original snapshot and split membership. A threshold reduction or more epochs
+alone is not an established fix, and the existing model remains experimental.
