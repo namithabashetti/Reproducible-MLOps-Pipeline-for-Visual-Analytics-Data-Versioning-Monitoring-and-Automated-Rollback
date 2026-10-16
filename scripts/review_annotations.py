@@ -54,6 +54,41 @@ def source_records(project):
     return records
 
 
+def validate_record(row, source):
+    """Validate one correction against its immutable source identity."""
+    if row is None or any(row.get(key) != source[key] for key in
+                          ("image_id", "split", "size", "image_sha256", "xml_sha256")):
+        raise ValueError(f"Source identity mismatch: {source['image_id']}")
+    status = row.get("status")
+    if status not in {"pending", "needs_adjudication", "reviewed"}:
+        raise ValueError(f"Invalid review status: {source['image_id']}")
+    if not isinstance(row.get("issues"), list) or any(
+            not isinstance(issue, str) or not issue.strip() for issue in row["issues"]):
+        raise ValueError("Issues must be a list of nonempty strings")
+    if status == "reviewed":
+        if row["issues"] or any(not isinstance(row.get(key), str) or not row[key].strip()
+                                for key in ("reviewer", "reason", "reviewed_at")):
+            raise ValueError("Reviewed records require reviewer, time, reason and no open issues")
+        stamp = datetime.fromisoformat(row["reviewed_at"].replace("Z", "+00:00"))
+        if stamp.utcoffset() != timezone.utc.utcoffset(stamp) or stamp > datetime.now(timezone.utc):
+            raise ValueError("Review time must be UTC and cannot be in the future")
+    width, height = source["size"]
+    fields = ("helmet_boxes", "head_boxes", "person_boxes")
+    for field in fields:
+        boxes = row.get(field)
+        if not isinstance(boxes, list):
+            raise ValueError(f"{source['image_id']}: {field} must be a list")
+        seen = set()
+        for box in boxes:
+            if (not isinstance(box, list) or len(box) != 4 or
+                any(type(value) not in (float, int) or not math.isfinite(value) for value in box)):
+                raise ValueError(f"{source['image_id']}: box must contain four finite coordinates")
+            x1, y1, x2, y2 = box
+            if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height) or tuple(box) in seen:
+                raise ValueError(f"{source['image_id']}: invalid or duplicate {field}")
+            seen.add(tuple(box))
+
+
 def check_review(project, review):
     if review.get("schema_version") != 2:
         raise ValueError("Unsupported review schema")
@@ -71,39 +106,9 @@ def check_review(project, review):
     changed = 0
     for source in expected:
         row = by_name.get(source["image_id"])
-        if row is None or any(row.get(key) != source[key] for key in
-                              ("image_id", "split", "size", "image_sha256", "xml_sha256")):
-            raise ValueError(f"Source identity mismatch: {source['image_id']}")
-        status = row.get("status")
-        if status not in {"pending", "needs_adjudication", "reviewed"}:
-            raise ValueError(f"Invalid review status: {source['image_id']}")
-        if not isinstance(row.get("issues"), list) or any(
-                not isinstance(issue, str) or not issue.strip() for issue in row["issues"]):
-            raise ValueError("Issues must be a list of nonempty strings")
-        if status == "reviewed":
-            if row["issues"] or any(not isinstance(row.get(key), str) or not row[key].strip()
-                                    for key in ("reviewer", "reason", "reviewed_at")):
-                raise ValueError("Reviewed records require reviewer, time, reason and no open issues")
-            stamp = datetime.fromisoformat(row["reviewed_at"].replace("Z", "+00:00"))
-            if stamp.utcoffset() != timezone.utc.utcoffset(stamp) or stamp > datetime.now(timezone.utc):
-                raise ValueError("Review time must be UTC and cannot be in the future")
-        width, height = source["size"]
-        fields = ("helmet_boxes", "head_boxes", "person_boxes")
-        for field in fields:
-            boxes = row.get(field)
-            if not isinstance(boxes, list):
-                raise ValueError(f"{source['image_id']}: {field} must be a list")
-            seen = set()
-            for box in boxes:
-                if (not isinstance(box, list) or len(box) != 4 or
-                    any(type(value) not in (float, int) or not math.isfinite(value) for value in box)):
-                    raise ValueError(f"{source['image_id']}: box must contain four finite coordinates")
-                x1, y1, x2, y2 = box
-                if not (0 <= x1 < x2 <= width and 0 <= y1 < y2 <= height) or tuple(box) in seen:
-                    raise ValueError(f"{source['image_id']}: invalid or duplicate {field}")
-                seen.add(tuple(box))
-        counts[status] += 1
-        changed += any(row[field] != source[field] for field in fields)
+        validate_record(row, source)
+        counts[row["status"]] += 1
+        changed += any(row[field] != source[field] for field in ("helmet_boxes", "head_boxes", "person_boxes"))
     return {"images": len(rows), "status_counts": dict(counts), "changed_images": changed,
             "ready_for_export": bool(rows) and counts["reviewed"] == len(rows)}
 

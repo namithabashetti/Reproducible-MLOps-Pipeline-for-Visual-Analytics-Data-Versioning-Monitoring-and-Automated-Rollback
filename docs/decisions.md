@@ -978,3 +978,31 @@ DVC history. No remote data transfer, corrected dataset export, training, stable
 promotion, final-test prediction or actual rollback occurred. Full three-class
 quality and the remaining acceptance evidence are still required. Detailed
 checks are recorded in `reports/annotation-adjudication-validation.json`.
+
+## Local script-driven annotation workflow
+
+The user requested an alternative to image-by-image review through chat to
+reduce time and token usage, then authorized implementing the local script
+workflow. `scripts.annotation_triage` reuses the existing suggestion file, checks
+all 4,000 source and suggestion identities, and ranks heuristic warnings without
+accepting any label. Its localhost editor supports drawing/editing all three
+classes, adding individual person suggestions, and saving explicit decisions
+with before/after journal entries. It uses the Python standard library and the
+existing image/validation dependencies; no hosted labeling service, new model,
+external package, data transfer or GPU run was introduced.
+
+The scan found flags in 3,996 images; 3,486 have strong person suggestions with
+no matching current person label, and 3,906 have head/helmet boxes without person
+coverage. These are triage signals, not confirmed errors or measured accuracy.
+The large counts mean there is no defensible automatic shortcut to a tiny
+review subset. Reviewed counts remain 14/4,000, with 22 recorded unresolved and
+3,964 pending. The frozen policy and complete-review export gate are unchanged.
+The user has not approved replacing explicit review with sampled acceptance.
+
+Shared record validation now serves both the exporter and editor. Seven tests
+exercise the new data/provenance and local HTTP paths, including rejected stale,
+invalid, held-out and unattested writes. All 74 local tests passed. Browser
+verification confirmed queue loading and the missing-attribution save guard;
+no production annotation was accepted during UI testing. The latest CI remains
+the earlier 58-test run. The review snapshot is unchanged because this step
+changes tooling, not annotation decisions.

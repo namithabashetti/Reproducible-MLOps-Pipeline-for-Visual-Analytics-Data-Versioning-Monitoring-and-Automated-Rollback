@@ -1,0 +1,131 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Local annotation review</title>
+<style>
+*{box-sizing:border-box}body{margin:0;background:#f3f5f7;color:#17242e;font:15px system-ui,sans-serif}
+header{padding:16px 24px;background:#163c43;color:white}h1{font-size:22px;margin:0 0 6px}header p{margin:0;color:#d8ebed}
+main{padding:18px;max-width:1500px;margin:auto}.toolbar,.panel{background:white;border:1px solid #d7dfe4;border-radius:8px;padding:14px;margin-bottom:12px}
+.toolbar{display:flex;align-items:center;gap:12px;flex-wrap:wrap}.layout{display:grid;grid-template-columns:minmax(420px,1fr) 400px;gap:18px}
+label{display:block;margin:8px 0}select,input,textarea,button{font:inherit;border:1px solid #a5b5bd;border-radius:5px;padding:7px;background:white;color:inherit}button{cursor:pointer}button:hover{background:#e4f0f0}button:disabled{opacity:.45;cursor:default}.primary{background:#125c65;color:white}.primary:hover{background:#104d55}
+input[type=checkbox]{width:auto}textarea{width:100%;min-height:64px}input[type=text]{width:100%}canvas{display:block;max-width:100%;height:auto;margin:auto;background:#e3e8eb;touch-action:none;border:1px solid #bdcbd0}
+.hint{font-size:13px;color:#526673}.badge{display:inline-block;background:#e4edf0;border-radius:4px;padding:3px 7px;margin:2px;font-size:12px}.warn{background:#fff0ce;color:#74500e}#message{min-height:26px;font-weight:600}#message.error{color:#a1222a}
+h2{font-size:17px;margin:0 0 8px}.boxrow{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e7ebee;padding:4px;gap:5px}.boxrow.selected{background:#dceff2}.boxrow button{padding:3px 7px}.scroll{max-height:225px;overflow:auto}#coords{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}#coords input{width:100%}.legend{margin:10px 0}.helmet{color:#177a14}.head{color:#ac5200}.person{color:#007b91}.small{font-size:12px}
+@media(max-width:950px){.layout{grid-template-columns:1fr}.toolbar{gap:6px}}
+</style>
+<header><h1>Local annotation review</h1><p>Check labels on your laptop. Suggestions are drawing aids; they are never accepted automatically.</p></header>
+<main>
+<div class="toolbar">
+ <label>Split <select id="split"><option value="all">All (validation first)</option><option value="validation">Validation</option><option value="train">Training</option></select></label>
+ <label>Status <select id="status"><option value="open">Needs review</option><option value="needs_adjudication">Unresolved</option><option value="pending">Pending</option><option value="reviewed">Reviewed</option><option value="all">All</option></select></label>
+ <label>Order <select id="order"><option value="priority">Highest priority</option><option value="simple">Fewest boxes first</option><option value="name">Image name</option></select></label>
+ <button id="previous">Previous</button><button id="next">Next</button><span id="position"></span><span id="totals"></span>
+</div>
+<div id="message" role="status">Loading local review…</div>
+<div class="layout">
+ <section>
+  <div class="panel"><h2 id="title">Image</h2><div id="flags"></div><p id="issues" class="hint"></p>
+   <div class="toolbar"><label>Draw a <select id="kind"><option value="person">person</option><option value="helmet">helmet</option><option value="head">head</option></select></label>
+    <label><input id="labels" type="checkbox" checked> Show labels</label><label><input id="proposals" type="checkbox"> Show suggestions</label></div>
+   <canvas id="canvas" width="832" height="832" aria-label="Image with editable annotation boxes"></canvas>
+   <div class="legend"><span class="person">■ Person</span> · <span class="helmet">■ Helmeted head</span> · <span class="head">■ Uncovered head</span> · dashed: suggested person</div>
+   <p class="hint">Drag across the image to add a box. Select a box below to adjust its coordinates or delete it. Separate mirrored copies; do not include tools in person boxes.</p>
+  </div>
+  <div class="panel"><h2>Current boxes</h2><div id="boxes" class="scroll"></div><div id="coords"></div><button id="updatebox" disabled>Update selected box</button><button id="deletebox" disabled>Delete selected box</button></div>
+ </section>
+ <aside>
+  <div class="panel"><h2>Save your decision</h2>
+   <label>Your name <input id="reviewer" type="text" autocomplete="name" placeholder="Reviewer name"></label>
+   <label>What changed, or what remains uncertain? <textarea id="reason" placeholder="Describe the correction or unresolved issue"></textarea></label>
+   <label><input id="attest" type="checkbox"> I checked the full image and all three classes, including cropped and mirrored people.</label>
+   <button class="primary" id="accept">Save as reviewed</button> <button id="defer">Save unresolved</button>
+   <p class="hint">Saves go directly to the local review file with a history entry. Original images and XML files remain unchanged.</p>
+  </div>
+  <div class="panel"><h2>Person suggestions</h2><p class="hint">Existing model predictions only. Missed people, duplicate boxes, and merged reflections are possible. Add individual boxes, then correct them on the image.</p>
+   <label>Minimum confidence <input id="confidence" type="range" min="0.05" max="0.95" step="0.05" value="0.5"><span id="confidencevalue">0.50</span></label>
+   <div id="suggestions" class="scroll"></div>
+  </div>
+  <div class="panel"><h2>Completion</h2><p class="hint">Priority flags are clues, not confirmed errors. Unflagged images still need review. Full dataset export stays blocked until all 4,000 records are reviewed and no issues remain.</p><p class="hint">Nothing here trains a model, transfers data to cloud storage, or approves deployment.</p></div>
+ </aside>
+</div>
+</main>
+<script>
+"use strict";
+const TOKEN="__SESSION_TOKEN__", $=id=>document.getElementById(id);
+const kinds=["person","helmet","head"], colors={person:"#00e4ff",helmet:"#67ff38",head:"#ff9c26"};
+let records=[], filtered=[], current=null, draft=null, selected=null, dirty=false, saving=false, imageReady=false, dragging=null;
+let filters={split:"all",status:"open",order:"priority"};
+const photo=new Image(),canvas=$("canvas"),ctx=canvas.getContext("2d");
+function message(text,error=false){$("message").textContent=text;$("message").className=error?"error":"";}
+function modified(){dirty=true;$("attest").checked=false;message("Unsaved changes — save your decision before leaving this image.");}
+function permitted(){return !saving&&(!dirty||confirm("Discard unsaved changes to this image?"));}
+function fillQueue(){
+ const split=$("split").value,status=$("status").value,order=$("order").value;
+ filtered=records.filter(r=>(split==="all"||r.split===split)&&(status==="all"||(status==="open"?r.status!=="reviewed":r.status===status)));
+ filtered.sort((a,b)=>{
+  if(split==="all"&&a.split!==b.split)return a.split==="validation"?-1:1;
+  if(order==="priority")return b.triage.priority_score-a.triage.priority_score||a.image_id.localeCompare(b.image_id);
+  if(order==="simple")return kinds.reduce((n,k)=>n+a[k+"_boxes"].length-b[k+"_boxes"].length,0)||a.image_id.localeCompare(b.image_id);
+  return a.image_id.localeCompare(b.image_id);
+ });
+ $("totals").textContent=`${records.filter(r=>r.status==="reviewed").length} / ${records.length} reviewed`;
+}
+function selectRecord(row){
+ current=row;draft=row?structuredClone(row):null;selected=null;dirty=false;imageReady=false;$("attest").checked=false;$("reason").value="";
+ $("accept").disabled=$("defer").disabled=!row;$("title").textContent=row?`${row.image_id} · ${row.split} · ${row.status}`:"No images in this filter";
+ $("flags").replaceChildren();$("issues").textContent=row?.issues.join(" · ")||"";
+ if(row){for(const [key,count] of Object.entries(row.triage.flags)){const badge=document.createElement("span");badge.className="badge warn";badge.textContent=`${key.replaceAll("_"," ")}: ${count}`;$("flags").append(badge);}
+  photo.src="/image/"+encodeURIComponent(row.image_id);canvas.width=row.size[0]*2;canvas.height=row.size[1]*2;
+ }
+ $("position").textContent=row?`${filtered.findIndex(r=>r.image_id===row.image_id)+1} / ${filtered.length} in queue`:"0 in queue";
+ renderLists();draw();message(row?"Ready. Review and edit locally; no chat image upload is needed.":"Choose another filter.");
+}
+photo.onload=()=>{imageReady=true;draw();};photo.onerror=()=>message("Image could not be loaded. Do not accept this record.",true);
+function drawBox(b,color,dashed=false,label=""){
+ ctx.strokeStyle=color;ctx.lineWidth=2;ctx.setLineDash(dashed?[7,5]:[]);ctx.strokeRect(b[0]*2,b[1]*2,(b[2]-b[0])*2,(b[3]-b[1])*2);
+ if(label){ctx.font="13px system-ui";ctx.fillStyle="#101d25";ctx.fillRect(b[0]*2,b[1]*2,ctx.measureText(label).width+6,17);ctx.fillStyle=color;ctx.fillText(label,b[0]*2+3,b[1]*2+13);}ctx.setLineDash([]);
+}
+function draw(){
+ ctx.clearRect(0,0,canvas.width,canvas.height);if(!draft||!imageReady)return;ctx.drawImage(photo,0,0,canvas.width,canvas.height);
+ if($("proposals").checked)draft.suggestions.proposed_boxes.forEach((b,i)=>{if(draft.suggestions.confidence[i]>=Number($("confidence").value))drawBox(b,"#ffffff",true,`suggestion ${i+1}`);});
+ if($("labels").checked)for(const k of kinds)draft[k+"_boxes"].forEach((b,i)=>drawBox(b,colors[k],false,`${k} ${i+1}${selected?.kind===k&&selected.index===i?" *":""}`));
+ if(dragging)drawBox(normalize(dragging.start,dragging.end),colors[$("kind").value]);
+}
+function renderLists(){
+ $("boxes").replaceChildren();$("suggestions").replaceChildren();$("coords").replaceChildren();$("updatebox").disabled=$("deletebox").disabled=!selected;
+ if(!draft)return;
+ for(const k of kinds)draft[k+"_boxes"].forEach((b,i)=>{const row=document.createElement("div");row.className="boxrow"+(selected?.kind===k&&selected.index===i?" selected":"");const text=document.createElement("span");text.className="small";text.textContent=`${k} ${i+1}: ${b.map(v=>Math.round(v)).join(", ")}`;const button=document.createElement("button");button.textContent="Edit";button.onclick=()=>{selected={kind:k,index:i};renderLists();draw();};row.append(text,button);$("boxes").append(row);});
+ draft.suggestions.proposed_boxes.forEach((b,i)=>{const score=draft.suggestions.confidence[i];if(score<Number($("confidence").value))return;const row=document.createElement("div");row.className="boxrow";const text=document.createElement("span");text.textContent=`Person ${i+1} · ${(score*100).toFixed(0)}%`;const button=document.createElement("button");button.textContent="Add";button.onclick=()=>{const box=b.map(Math.round);if(draft.person_boxes.some(v=>JSON.stringify(v)===JSON.stringify(box)))return message("That suggestion is already present.");draft.person_boxes.push(box);selected={kind:"person",index:draft.person_boxes.length-1};modified();renderLists();draw();};row.append(text,button);$("suggestions").append(row);});
+ if(selected){const b=draft[selected.kind+"_boxes"][selected.index];["xmin","ymin","xmax","ymax"].forEach((name,i)=>{const label=document.createElement("label");label.className="small";label.textContent=name;const input=document.createElement("input");input.type="number";input.step="1";input.value=b[i];input.id="coord"+i;label.append(input);$("coords").append(label);});}
+}
+function normalize(a,b){return [Math.min(a[0],b[0]),Math.min(a[1],b[1]),Math.max(a[0],b[0]),Math.max(a[1],b[1])];}
+function point(event){const r=canvas.getBoundingClientRect();return [Math.round(Math.max(0,Math.min(draft.size[0],(event.clientX-r.left)/r.width*draft.size[0]))),Math.round(Math.max(0,Math.min(draft.size[1],(event.clientY-r.top)/r.height*draft.size[1])))];}
+canvas.onpointerdown=e=>{if(!draft||!imageReady||saving)return;const p=point(e);dragging={start:p,end:p};canvas.setPointerCapture(e.pointerId);};
+canvas.onpointermove=e=>{if(dragging){dragging.end=point(e);draw();}};
+canvas.onpointerup=e=>{if(!dragging)return;const b=normalize(dragging.start,point(e));dragging=null;if(b[2]>b[0]&&b[3]>b[1]){const k=$("kind").value;draft[k+"_boxes"].push(b);selected={kind:k,index:draft[k+"_boxes"].length-1};modified();renderLists();}draw();};
+canvas.onpointercancel=()=>{dragging=null;draw();};
+$("updatebox").onclick=()=>{if(!selected)return;const b=[0,1,2,3].map(i=>Number($("coord"+i).value));if(!b.every(Number.isFinite)||b[0]<0||b[1]<0||b[2]>draft.size[0]||b[3]>draft.size[1]||b[0]>=b[2]||b[1]>=b[3])return message("Use a positive-size box inside the image.",true);draft[selected.kind+"_boxes"][selected.index]=b;modified();renderLists();draw();};
+$("deletebox").onclick=()=>{if(!selected)return;draft[selected.kind+"_boxes"].splice(selected.index,1);selected=null;modified();renderLists();draw();};
+for(const id of ["labels","proposals"])$(id).onchange=draw;
+$("confidence").oninput=()=>{$("confidencevalue").textContent=Number($("confidence").value).toFixed(2);renderLists();draw();};
+for(const id of ["split","status","order"])$(id).onchange=()=>{if(permitted()){for(const key of Object.keys(filters))filters[key]=$(key).value;fillQueue();selectRecord(filtered[0]);}else{for(const key of Object.keys(filters))$(key).value=filters[key];}};
+function navigate(step){if(!permitted())return;const i=filtered.findIndex(r=>r.image_id===current?.image_id);selectRecord(filtered[Math.max(0,Math.min(filtered.length-1,i+step))]);}
+$("next").onclick=()=>navigate(1);$("previous").onclick=()=>navigate(-1);
+$("reason").oninput=()=>{dirty=true;};
+async function save(status){
+ if(!draft||!imageReady||saving)return;const reviewer=$("reviewer").value.trim(),reason=$("reason").value.trim();
+ if(!reviewer||!reason)return message("Enter your name and a correction note or unresolved issue.",true);
+ if(status==="reviewed"&&!$("attest").checked)return message("Confirm that you checked the full image and all three classes.",true);
+ const payload={image_id:draft.image_id,expected_record:current.revision,reviewer,reason,status,issues:status==="reviewed"?[]:[reason],attested:$("attest").checked};for(const k of kinds)payload[k+"_boxes"]=draft[k+"_boxes"];
+ saving=true;document.querySelector("main").inert=true;$("accept").disabled=$("defer").disabled=true;message("Saving to the local review journal…");
+ try{const response=await fetch("/api/decision",{method:"POST",headers:{"Content-Type":"application/json","X-Review-Token":TOKEN},body:JSON.stringify(payload)});const updated=await response.json();if(!response.ok)throw Error(updated.error||"Save failed");
+  const oldIndex=filtered.findIndex(r=>r.image_id===current.image_id);records[records.findIndex(r=>r.image_id===updated.image_id)]=updated;dirty=false;try{localStorage.setItem("annotationReviewer",reviewer);}catch{}fillQueue();selectRecord(filtered[Math.min(oldIndex,filtered.length-1)]);message(`Saved ${updated.image_id} as ${status.replaceAll("_"," ")}.`);
+ }catch(e){message(e.message,true);}finally{saving=false;document.querySelector("main").inert=false;$("accept").disabled=$("defer").disabled=!draft;}
+}
+$("accept").onclick=()=>save("reviewed");$("defer").onclick=()=>save("needs_adjudication");
+window.onbeforeunload=e=>{if(dirty||saving){e.preventDefault();e.returnValue="";}};
+try{$("reviewer").value=localStorage.getItem("annotationReviewer")||"";}catch{}
+fetch("/api/queue").then(r=>{if(!r.ok)throw Error("Could not load review");return r.json();}).then(data=>{records=data.records;fillQueue();selectRecord(filtered[0]);}).catch(e=>message(e.message,true));
+</script>
+</html>
