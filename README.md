@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Full three-class quality remains required. The user approved incremental annotation review: 200 training and 100 fixed validation images in the first round, using the local editor. Three selected images are already reviewed, three have unresolved issues, and 294 are pending. All prior corrections are preserved. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
+**Current status: The user requested all 3,500 training images. The candidate preserves 213 reviewed training records and accepts 3,287 training records as-is; the fixed 100-image validation set has completed review records. Known person-label gaps remain. All 82 local tests pass. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1359,127 +1359,77 @@ reviewed DVC version of derived labels before a new training experiment. Preserv
 the original snapshot and split membership. A threshold reduction or more epochs
 alone is not an established fix, and the existing model remains experimental.
 
-## Reviewed person-label corrections
+## Annotation acceptance and the full-training candidate
 
-The correction workflow is implemented in `scripts/review_annotations.py`, with
-the [annotation policy](docs/annotation-policy.md). It records the raw image/XML
-hashes, split and policy identities, person boxes, reviewer, timestamp and open
-issues. Schema 2 permits explicit, image-reviewed corrections to all three
-classes after a missing uncovered-head label was found. Policy version 3 replaces
-the requirement to review all 4,000 images with an incremental first round of
-200 training and 100 validation images, frozen in `data/annotation-cohort.json`.
-Selection uses source class presence and crowding with seed 42, proportional
-allocation and at least one image per stratum; predictions and review outcomes
-are not selection inputs. The source strata are approximate because labels are
-incomplete. Subset metrics must not be presented as full-validation accuracy.
-All selected images must be reviewed with no open issues before export; only
-selected images enter the candidate. Unselected records remain preserved.
-Final-test and monitoring images remain excluded. Compare baseline and candidate
-on the same corrected validation subset and retain it across rounds. Expand
-training based on development results; record any necessary validation expansion
-before reevaluating all compared models. Final-test integrity review and the
-three-class model-quality requirement remain unchanged.
-Export does not train, promote a model or change the current DVC pipeline.
+The [annotation policy](docs/annotation-policy.md), version 4, follows the user's
+2026-10-17 instruction to use all training images. The fixed manifest in
+`data/annotation-cohort.json` selects 3,500 training and the same 100 validation
+images used in the preceding incremental round. Final-test and monitoring images
+remain excluded. Class mapping and the original split membership are unchanged.
 
-`reports/person-review-v1/review.json` currently contains 18 image/overlay-reviewed
-corrections, 26 images requiring adjudication of reflected/cropped fragments or
-occlusion, and 3,956 pending records. Four earlier accepted records were reopened
-after pixel-symmetry checks located mirror boundaries their boxes crossed. The
-schema-1 snapshot and review journal preserve the previous decisions. The
-remaining reviewed records were rechecked under the three-class policy; one
-includes a missing uncovered-head correction. A subsequent batch resolved nine
-earlier ambiguous images and accepted one newly inspected image. Those corrections
-separate mirrored people, tighten helmeted-head boxes and add omitted cropped
-helmets. Seven other newly inspected images retain explicit open issues.
-Batch 006 inspected eight more training images: four have accepted corrections,
-including separately boxed mirrored people, and four retain unresolved issues.
-The reviewer was Codex visual inspection,
-not an independent annotation team. These selected examples do not establish a
-dataset-wide correction rate. No corrected dataset has been exported, no new
-training has started, and no stable alias has been assigned.
+Of the training records, 213 have completed review records and 3,287 are explicitly
+`accepted_as_is`. The latter records preserve their boxes and any known issues;
+they record the user's instruction rather than claiming visual inspection.
+The validation records retain user-attested/completed reviews. All prior records,
+policy changes and before/after decisions remain in the review journal. The full
+4,000-record working file contains 315 reviewed, 3,287 accepted as-is, 395 pending
+and three unresolved records; the remaining validation records are outside this run.
 
-Thirteen annotation-workflow tests check incomplete reviews, unresolved issues, source/policy/split
-changes, invalid boxes, review attribution, held-out injection, output isolation,
-and real conversion preserving source files, explicit head corrections, and
-rejection of unreconciled legacy reviews, and policy identity across Git newline
-conversion. Policy text hashes normalize line endings; image/XML hashes remain
-byte-exact. Tests also check frozen cohort identity, deterministic stratification,
-selected unresolved records, and exclusion of unselected images from export.
-All 79 local tests passed in 65.456 seconds after the incremental workflow change.
-The user explicitly retained full three-class quality acceptance;
-the existing baseline is not approved for a limited demonstration. Corrected
-data review, isolated retraining, comparative evaluation, stable approval and
-actual rollback/post-rollback validation remain necessary.
+The isolated export is `data/person-corrected-fulltrain-v1`, tracked by
+`data/person-corrected-fulltrain-v1.dvc`. The separate seven-file audit snapshot is
+tracked by `data/annotation-review.dvc`; it includes review records, journal,
+policy, cohort, suggestions, suggestion generator and status. Both snapshots are
+local; this step does not upload dataset bytes to Google Drive. Original PNG/XML
+files, the original processed data and the baseline checkpoint are preserved.
 
-Generic-person suggestions use only the existing local pretrained YOLOv8n
-checkpoint, with separate report-local settings and CPU inference. They are
-saved in `reports/person-review-v1/model-suggestions.json`, never in reviewed
-labels. The checkpoint, image hashes and inference settings are recorded. No
-test or monitoring images are used. Suggestions and structural checks cannot
-establish that a complete, accurate annotation review has occurred.
+The training export has 13,307 helmet, 3,903 head and 549 person boxes. Person boxes
+occur in only 126 of 3,500 training images. Validation has 368 helmet, 116 head and
+30 person boxes, with person boxes in five of 100 images. The other images retain
+head/helmet labels without person boxes. These known completeness warnings are
+not resolved by accepting the dataset. The run is experimental; it cannot by
+itself establish reliable full three-class quality or stable deployment approval.
 
-Suggestions now cover all 4,000 training/validation images. A seven-file local DVC
-snapshot (`data/annotation-review.dvc`, MD5
-`2d4cc7af68bbed2e21130529fbae63ac.dir`) preserves the review, policy, journal,
-frozen cohort, suggestions, suggestion generator and explicit incomplete status. It is **not
-training data** and is not referenced by the training pipeline. The snapshot is
-in the local DVC cache; this step did not push it to Google Drive. The working
-review remains under `reports/person-review-v1/`. Retain old snapshots and update
-the DVC review snapshot as further decisions are made.
+### Training and comparison
 
-### Local checks and annotation editor
-
-Use the existing 4,000-image suggestion file without another inference pass or
-sending images through chat:
+The training entry point accepts a separately tracked candidate and a fresh run
+name. It validates the frozen cohort, review/acceptance gate, split membership and
+class mapping, then copies inputs so YOLO caches cannot alter DVC outputs.
+Candidate DVC identity, cohort/review hashes and hashes of every staged image and
+label are retained. MLflow import verifies this evidence and keeps registration
+experimental. The original baseline training path remains available.
 
 ```powershell
-Set-Location -LiteralPath 'F:\major project implementation'
+.\.venv\Scripts\python.exe -m src.training.train --reviewed-data data/person-corrected-fulltrain-v1 --run-name fulltrain-v1
+```
+
+Existing run names are refused. The experiment uses the existing pinned training
+parameters: YOLOv8n, 30 epochs, image size 416, batch 4, seed 42, CUDA, AdamW,
+learning rate 0.001. It does not tune against the final test or alter model-quality
+requirements. Progress is written under `artifacts/training/fulltrain-v1` and the
+local training logs under `reports/`.
+
+The original baseline has been evaluated against the same fixed validation labels
+at `artifacts/comparisons/fulltrain-v1-baseline/metrics.json`. Its person AP50 on
+this subset is 0.07792 and recall is zero at the evaluator's reported operating
+point. The candidate must be compared on those same inputs after training. These
+are subset development metrics, not a full-validation or final-test claim.
+
+### Local editor and verification
+
+```powershell
 .\.venv\Scripts\python.exe -m scripts.annotation_triage scan
 .\.venv\Scripts\python.exe -m scripts.annotation_triage serve
 ```
 
-Open `http://127.0.0.1:8766` while the server is running. It binds only to the
-local machine and needs no cloud account, extra dependencies or GPU. Stop a
-foreground server with Ctrl+C. `--review` selects another review folder under
-`reports/`; `--port` changes the serving port.
+The local editor at `http://127.0.0.1:8766` shows the frozen selection. It separates
+reviewed records from training accepted as-is. Model suggestions remain editable
+drafts, never automatic ground truth. Save corrections with a reviewer name and
+reason. Source identity checks, the shared write lock and the journal preserve
+provenance. Further edits require a new export/version before another experiment;
+they do not change an already exported candidate or a running experiment.
 
-The scan first verifies every training/validation source identity, split, policy
-and label coordinate. It checks suggestion coverage and image fingerprints,
-then writes `reports/person-review-v1/triage.json`. Heuristic flags cover unmatched
-person predictions, head/helmet boxes without person coverage, class overlaps,
-near-duplicates, crowded scenes, border fragments and existing open issues.
-The queue contains only the frozen cohort. Validation images come first, then higher-priority flags. Prediction confidence
-is not annotation accuracy; flags can be false positives, and unflagged images
-are not automatically verified. The initial scan flagged 3,996 images, including
-3,486 with unmatched person suggestions at confidence >= 0.5 and IoU < 0.5.
-
-In the editor, filter by split/status and optionally choose **Fewest boxes first**.
-Drag to draw boxes, select **Edit** to adjust coordinates, or add individual
-person suggestions and correct their extents. **Add shown suggestions as draft**
-adds the suggestions above the displayed confidence threshold without accepting
-them; remove duplicate/merged boxes and add missed people. Enter a reviewer name and note.
-**Save as reviewed** requires explicit confirmation that all three classes and
-the full image were checked; **Save unresolved** records the remaining issue.
-The server saves directly to the working review JSON and appends before/after
-records to its journal. Unsaved edits trigger a navigation warning. Stale edits,
-changed source files, invalid coordinates, unknown images and unauthenticated
-write requests are rejected. The server exposes only this editor, its queue and
-the allowlisted training/validation images, not the project filesystem.
-
-`scan` never changes review status or writes proposed labels into the correction
-file. The export gate now applies to every image in the frozen selected round.
-The manifest hash detects accidental resampling; explicit reconciliation and
-an audit entry are required to change it. Prior review timestamps and decisions
-were retained during the user-approved version-3 policy migration. The
-editor does not train, promote, upload or modify original images/XML. Refresh
-the scan and update the separate local DVC snapshot after a completed review
-batch; live browser saves do not automatically rewrite `data/annotation-review`.
-Eight triage tests cover read-only triage, source/suggestion identity, explicit
-acceptance, retained history, invalid/stale saves, and local HTTP access controls.
-The live editor queue was checked against all 300 frozen IDs, and its JavaScript
-passed a syntax check. Three selected images are reviewed, three unresolved and
-294 pending. No new CI run was dispatched; the last completed CI run covered
-the preceding 58-test implementation. The next step is local review of the
-remaining selected images, followed by an isolated corrected export and training
-integration. The existing training command still uses the original baseline
-inputs; do not use it to claim a corrected-label experiment.
+All 82 local tests passed in 43.461 seconds, including training-only as-is
+acceptance, required validation review, isolated staging, cohort membership,
+input hash/provenance checks and existing lifecycle tests. Editor JavaScript
+syntax passed. The last completed GitHub CI run covered the earlier 58-test
+implementation; this step has not dispatched a new CI run.

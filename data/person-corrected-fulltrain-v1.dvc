@@ -1,0 +1,6 @@
+outs:
+- md5: bbd0d111f795118df328ec255784ae0e.dir
+  size: 919581889
+  nfiles: 7204
+  hash: md5
+  path: person-corrected-fulltrain-v1

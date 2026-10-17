@@ -68,6 +68,42 @@ class TrackingTests(unittest.TestCase):
         mlflow.set_registry_uri(self.previous_uris[1])
         self.temporary.cleanup()
 
+    def test_reviewed_candidate_provenance_and_staged_content_are_checked(self):
+        directory = self.directory
+        pointer = directory / "source/data/person-corrected-test.dvc"
+        pointer.parent.mkdir()
+        pointer.write_text("outs:\n- md5: candidate.dir\n  path: person-corrected-test\n")
+        selection = json.loads((directory / "inputs/selection.json").read_text())
+        (directory / "inputs/review.json").write_text('{"fixture": "review provenance"}')
+        (directory / "inputs/annotation-cohort.json").write_text(json.dumps({"selection": selection}))
+        hashes = {}
+        for split, names in selection.items():
+            for name in names:
+                for category, suffix in (("images", ".png"), ("labels", ".txt")):
+                    relative = f"{category}/{split}/{name}{suffix}"
+                    path = directory / "inputs" / relative
+                    path.parent.mkdir(parents=True, exist_ok=True)
+                    path.write_bytes(b"synthetic input fixture")
+                    hashes[relative] = file_hash(path)
+        (directory / "inputs/input-sha256.json").write_text(json.dumps(hashes))
+        lineage_path = directory / "lineage.json"
+        lineage = json.loads(lineage_path.read_text())
+        lineage["file_sha256"]["data/person-corrected-test.dvc"] = file_hash(pointer)
+        lineage["reviewed_data"] = {"path": "data/person-corrected-test", "dvc_md5": "candidate.dir",
+                                   "review_sha256": file_hash(directory / "inputs/review.json"),
+                                   "cohort_sha256": file_hash(directory / "inputs/annotation-cohort.json")}
+        lineage_path.write_text(json.dumps(lineage))
+        read_completed_run(directory)
+        label = directory / "inputs/labels/train/a.txt"
+        original = label.read_bytes()
+        label.write_text("changed")
+        with self.assertRaisesRegex(ValueError, "input was changed"):
+            read_completed_run(directory)
+        label.write_bytes(original)
+        (directory / "inputs/review.json").write_text("changed review")
+        with self.assertRaisesRegex(ValueError, "provenance mismatch"):
+            read_completed_run(directory)
+
     def test_import_retry_retrieval_and_existing_stable_alias(self):
         first = log_completed_run(self.root, self.directory)
         self.assertTrue(first["verified"])

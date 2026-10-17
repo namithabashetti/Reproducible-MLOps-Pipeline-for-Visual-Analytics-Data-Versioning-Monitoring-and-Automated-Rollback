@@ -60,13 +60,15 @@ def validate_record(row, source):
                           ("image_id", "split", "size", "image_sha256", "xml_sha256")):
         raise ValueError(f"Source identity mismatch: {source['image_id']}")
     status = row.get("status")
-    if status not in {"pending", "needs_adjudication", "reviewed"}:
+    if status not in {"pending", "needs_adjudication", "reviewed", "accepted_as_is"}:
         raise ValueError(f"Invalid review status: {source['image_id']}")
     if not isinstance(row.get("issues"), list) or any(
             not isinstance(issue, str) or not issue.strip() for issue in row["issues"]):
         raise ValueError("Issues must be a list of nonempty strings")
-    if status == "reviewed":
-        if row["issues"] or any(not isinstance(row.get(key), str) or not row[key].strip()
+    if status == "accepted_as_is" and source["split"] != "train":
+        raise ValueError("As-is acceptance is limited to training; validation requires review")
+    if status in {"reviewed", "accepted_as_is"}:
+        if (status == "reviewed" and row["issues"]) or any(not isinstance(row.get(key), str) or not row[key].strip()
                                 for key in ("reviewer", "reason", "reviewed_at")):
             raise ValueError("Reviewed records require reviewer, time, reason and no open issues")
         stamp = datetime.fromisoformat(row["reviewed_at"].replace("Z", "+00:00"))
@@ -169,7 +171,9 @@ def check_review(project, review):
     return {"images": len(rows), "status_counts": dict(counts), "changed_images": changed,
             "selected_images": len(selected), "selected_status_counts": dict(selected_counts),
             "selected_split_counts": {s: len(names) for s, names in selection.items()},
-            "ready_for_export": bool(selected) and selected_counts["reviewed"] == len(selected)}
+            "contains_as_is_training": bool(selected_counts["accepted_as_is"]),
+            "ready_for_export": bool(selected) and all(r["status"] == "reviewed" or
+                (r["split"] == "train" and r["status"] == "accepted_as_is") for r in selected)}
 
 
 def export_review(project, review, output):

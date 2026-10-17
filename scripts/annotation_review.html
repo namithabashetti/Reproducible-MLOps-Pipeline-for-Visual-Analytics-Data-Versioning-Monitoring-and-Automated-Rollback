@@ -18,7 +18,7 @@ h2{font-size:17px;margin:0 0 8px}.boxrow{display:flex;justify-content:space-betw
 <main>
 <div class="toolbar">
  <label>Split <select id="split"><option value="all">All (validation first)</option><option value="validation">Validation</option><option value="train">Training</option></select></label>
- <label>Status <select id="status"><option value="open">Needs review</option><option value="needs_adjudication">Unresolved</option><option value="pending">Pending</option><option value="reviewed">Reviewed</option><option value="all">All</option></select></label>
+ <label>Status <select id="status"><option value="open">Needs review</option><option value="needs_adjudication">Unresolved</option><option value="pending">Pending</option><option value="reviewed">Reviewed</option><option value="accepted_as_is">Training accepted as-is</option><option value="all">All</option></select></label>
  <label>Order <select id="order"><option value="priority">Highest priority</option><option value="simple">Fewest boxes first</option><option value="name">Image name</option></select></label>
  <button id="previous">Previous</button><button id="next">Next</button><span id="position"></span><span id="totals"></span>
 </div>
@@ -46,7 +46,7 @@ h2{font-size:17px;margin:0 0 8px}.boxrow{display:flex;justify-content:space-betw
    <label>Minimum confidence <input id="confidence" type="range" min="0.05" max="0.95" step="0.05" value="0.5"><span id="confidencevalue">0.50</span></label>
    <button id="draftsuggestions">Add shown suggestions as draft</button><div id="suggestions" class="scroll"></div>
   </div>
-  <div class="panel"><h2>Completion</h2><p class="hint">The queue shows this round's frozen selection. Export includes only those images and stays blocked until every selected image is reviewed with no open issues. Other saved reviews are retained. Sample metrics alone do not establish full model acceptance.</p><p class="hint">Nothing here trains a model, transfers data to cloud storage, or approves deployment.</p></div>
+  <div class="panel"><h2>Completion</h2><p class="hint">The queue shows the frozen selection. Validation requires completed review. Training may also be explicitly accepted as-is by the user; this retains known issues and does not certify label accuracy. Model acceptance still requires quality evidence.</p><p class="hint">Nothing here trains a model, transfers data to cloud storage, or approves deployment.</p></div>
  </aside>
 </div>
 </main>
@@ -62,14 +62,14 @@ function modified(){dirty=true;$("attest").checked=false;message("Unsaved change
 function permitted(){return !saving&&(!dirty||confirm("Discard unsaved changes to this image?"));}
 function fillQueue(){
  const split=$("split").value,status=$("status").value,order=$("order").value;
- filtered=records.filter(r=>(split==="all"||r.split===split)&&(status==="all"||(status==="open"?r.status!=="reviewed":r.status===status)));
+ filtered=records.filter(r=>(split==="all"||r.split===split)&&(status==="all"||(status==="open"?!["reviewed","accepted_as_is"].includes(r.status):r.status===status)));
  filtered.sort((a,b)=>{
   if(split==="all"&&a.split!==b.split)return a.split==="validation"?-1:1;
   if(order==="priority")return b.triage.priority_score-a.triage.priority_score||a.image_id.localeCompare(b.image_id);
   if(order==="simple")return kinds.reduce((n,k)=>n+a[k+"_boxes"].length-b[k+"_boxes"].length,0)||a.image_id.localeCompare(b.image_id);
   return a.image_id.localeCompare(b.image_id);
  });
- $("totals").textContent=`${records.filter(r=>r.status==="reviewed").length} / ${records.length} reviewed`;
+ $("totals").textContent=`${records.filter(r=>r.status==="reviewed").length} reviewed · ${records.filter(r=>r.status==="accepted_as_is").length} training accepted as-is · ${records.length} selected`;
 }
 function selectRecord(row){
  current=row;draft=row?structuredClone(row):null;selected=null;dirty=false;imageReady=false;$("attest").checked=false;$("reason").value="";

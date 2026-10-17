@@ -217,6 +217,48 @@ class AnnotationReviewTests(unittest.TestCase):
         with self.assertRaises(ValueError):
             make_cohort(records, "split-hash", 1, 5)
 
+    def test_reviewed_candidate_stages_copies_and_rejects_changed_selection(self):
+        from src.training.train import prepare_data
+
+        self.reviewed()
+        self.freeze_cohort({"train": ["train1"], "validation": ["val1"]})
+        export_review(self.project, self.review, self.output)
+        staged = self.project / "staged"
+        _, counts = prepare_data(self.project, staged, False, self.output)
+        self.assertEqual(counts, {"train": 1, "validation": 1})
+        hashes = json.loads((staged / "input-sha256.json").read_text())
+        self.assertEqual(len(hashes), 4)
+        for name, expected in hashes.items():
+            self.assertEqual(digest(staged / name), expected)
+        label = staged / "labels/train/train1.txt"
+        original = (self.output / "labels/train/train1.txt").read_bytes()
+        label.write_text("modified staging copy")
+        self.assertEqual((self.output / "labels/train/train1.txt").read_bytes(), original)
+        (self.output / "selection.json").write_text(json.dumps({"train": ["heldout1"], "validation": ["val1"]}))
+        with self.assertRaisesRegex(ValueError, "selection"):
+            prepare_data(self.project, self.project / "bad-staging", False, self.output)
+        self.assertFalse((self.project / "bad-staging").exists())
+
+    def test_as_is_training_requires_attribution_and_never_bypasses_validation_review(self):
+        self.reviewed()
+        train, val = self.review['records']
+        train.update(status='accepted_as_is', reason='User explicitly accepted existing training labels',
+                     issues=['Known incomplete person labels retained'])
+        self.assertTrue(check_review(self.project, self.review)['contains_as_is_training'])
+        val['status'] = 'pending'
+        with self.assertRaisesRegex(ValueError, 'incomplete'):
+            export_review(self.project, self.review, self.output)
+        val['status'] = 'accepted_as_is'
+        with self.assertRaisesRegex(ValueError, 'limited to training'):
+            check_review(self.project, self.review)
+        val['status'] = 'reviewed'
+        train['reviewer'] = ''
+        with self.assertRaises(ValueError):
+            check_review(self.project, self.review)
+        train['reviewer'] = 'User acceptance'
+        self.assertTrue(export_review(self.project, self.review, self.output)['ready_for_export'])
+        self.assertEqual(train['issues'], ['Known incomplete person labels retained'])
+
 
 if __name__ == "__main__":
     unittest.main()

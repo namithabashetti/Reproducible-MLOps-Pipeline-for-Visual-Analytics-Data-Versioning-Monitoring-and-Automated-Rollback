@@ -1091,3 +1091,69 @@ processed data; it must not be used to represent a corrected-data experiment.
 Compare the baseline and candidate on the same corrected validation subset,
 expand training only when development evidence warrants it, and keep final-test
 selection, stable approval and actual rollback validation as later gates.
+
+
+## User-attested subset and subsequent all-training experiment (2026-10-17)
+
+After the editor recorded 129 selected images as reviewed, the user explicitly
+confirmed checking all three classes and requested proceeding. The remaining
+171 selected records were marked reviewed with attribution to that user
+confirmation, not a new Codex visual inspection. The journal preserves old
+issues and boxes. An isolated 200/100 export was created locally, but no model
+was trained from it. It remains historical evidence under
+`data/person-corrected-round1`, with the preceding manifest in
+`reports/person-review-v1/before-full-training`.
+
+The user then explicitly requested using all training data. Policy version 4
+records this scope change without falsely asserting that every additional image
+was visually checked. All 3,500 original training IDs are now selected; the 100
+validation IDs remain identical. There are 213 reviewed training records and
+3,287 training records accepted as-is on the user's instruction. Existing boxes,
+reviewed decisions and issues are preserved. As-is acceptance is forbidden for
+validation by the validator. Final-test and monitoring images remain excluded.
+The original class definitions and final three-class quality target are unchanged.
+
+The new export `data/person-corrected-fulltrain-v1` contains 3,500 training and
+100 validation images, with explicit selection/review/cohort metadata. Its local
+DVC identity is `bbd0d111f795118df328ec255784ae0e.dir` (7,204 files,
+919,581,889 bytes). The seven-file review evidence snapshot is
+`6b65a673d3f14e19e77ed78315cf2a29.dir` (15,982,064 bytes). No remote dataset
+transfer occurred. Source PNG/XML files, original processed data and the baseline
+checkpoint remain separate from these exports and staged experiment inputs.
+
+The training set has 13,307 helmet, 3,903 head and 549 person boxes, with person
+boxes in only 126 training images. Validation has 368 helmet, 116 head and 30
+person boxes, with person labels in five images. The 3,374 other training images
+and 95 other validation images have head/helmet boxes without person boxes.
+These completeness warnings remain recorded; acceptance as-is is not a label
+repair or proof of full-class quality. No model receives a stable alias here.
+
+The training entry point now supports an explicit DVC-tracked candidate and
+requires a fresh run name and the full selected cohort. It checks source review
+identity, acceptance readiness, frozen membership, class configuration and
+export file membership before copying inputs into the isolated run. It records
+candidate DVC identity, review/cohort hashes, and each staged image/label hash.
+MLflow import checks candidate provenance and staged content before experimental
+registration. Existing baseline behavior is retained. Every run snapshots its
+actual source files, including uncommitted edits when present.
+
+All 82 local tests passed in 43.461 seconds. New tests exercise the training-only
+as-is exception, the continuing validation review gate, safe candidate staging,
+changed-selection rejection, and import rejection for altered input/provenance.
+DVC status was clean before starting the experiment. CUDA tensor and NMS tests
+passed on the RTX 3050 A Laptop GPU with 4 GiB VRAM; the battery reported 100%
+and external power. The local editor was restarted for the new scope.
+
+The original baseline was reevaluated on an isolated copy of the exact 100
+validation images. Evidence is in
+`artifacts/comparisons/fulltrain-v1-baseline/metrics.json`; person AP50 was
+0.07792 and recall was zero at the reported operating point. These are subset
+metrics on user-attested labels, not independent final-test evidence.
+
+The isolated `fulltrain-v1` experiment was launched using the pinned 30-epoch,
+416-pixel, batch-4, seed-42 CUDA configuration and the existing local pretrained
+YOLOv8n weights. Logs are under `reports/fulltrain-v1-training*.log`, with run
+artifacts under `artifacts/training/fulltrain-v1`. A launch is not a completed
+run or successful training result. After completion, compare all three classes
+on the same validation inputs; stable approval and actual rollback verification
+remain separate unresolved requirements.

@@ -93,6 +93,32 @@ def read_completed_run(directory):
             or lock["stages"]["split"]["outs"][0]["md5"] != lineage["splits_dvc_md5"]
             or lock["stages"]["preprocess"]["outs"][0]["md5"] != lineage["processed_dvc_md5"]):
         raise ValueError("DVC snapshot identities disagree with lineage")
+    if "reviewed_data" in lineage:
+        candidate = lineage["reviewed_data"]
+        relative = Path(candidate["path"])
+        if relative.parent.as_posix() != "data" or not re.fullmatch(r"person-corrected-[A-Za-z0-9_-]+", relative.name):
+            raise ValueError("Invalid reviewed candidate path")
+        pointer = directory / "source" / relative.with_suffix('.dvc')
+        metadata = yaml.safe_load(pointer.read_text())["outs"][0]
+        if metadata["md5"] != candidate["dvc_md5"] or metadata["path"] != relative.name:
+            raise ValueError("Reviewed candidate DVC identity mismatch")
+        for name, key in (("review.json", "review_sha256"), ("annotation-cohort.json", "cohort_sha256")):
+            if file_hash(directory / "inputs" / name) != candidate[key]:
+                raise ValueError("Reviewed candidate provenance mismatch")
+            files.append("inputs/" + name)
+        cohort = json.loads((directory / "inputs/annotation-cohort.json").read_text())
+        if selected != cohort["selection"]:
+            raise ValueError("Reviewed training membership differs from the frozen cohort")
+        input_hashes = json.loads((directory / "inputs/input-sha256.json").read_text())
+        expected = {f"{category}/{split}/{name}{suffix}" for split, names in selected.items()
+                    for name in names for category, suffix in (("images", ".png"), ("labels", ".txt"))}
+        if set(input_hashes) != expected:
+            raise ValueError("Incomplete reviewed input hashes")
+        for name, expected_hash in input_hashes.items():
+            path = (directory / "inputs" / name).resolve()
+            if not path.is_relative_to(directory / "inputs") or file_hash(path) != expected_hash:
+                raise ValueError("Reviewed training input was changed")
+        files.append("inputs/input-sha256.json")
     hashes = {name: file_hash(directory / name) for name in sorted(files)}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
     return lineage, report, history, values, hashes, digest
@@ -157,6 +183,8 @@ def log_completed_run(project, directory):
                 smoke_test=str(report["smoke_test"]).lower(), mlflow_version=mlflow.__version__,
                 model_format="ultralytics_checkpoint", importer_sha256=file_hash(Path(__file__)))
     tags["mlflow.source.git.commit"] = lineage["git_commit"]
+    if "reviewed_data" in lineage:
+        tags.update({"reviewed_data_" + key: str(value) for key, value in lineage["reviewed_data"].items()})
     tags["mlflow.source.name"] = "src/training/train.py"
     run = existing[0] if existing else client.create_run(experiment_id, tags=tags, run_name=directory.name)
     run_id = run.info.run_id
@@ -200,7 +228,7 @@ def log_completed_run(project, directory):
             name, source=f"runs:/{run_id}/model", run_id=run_id,
             tags={"bundle_sha256": digest, "checkpoint_sha256": report["checkpoint_sha256"],
                   "approval_status": "experimental", "dataset_dvc_md5": lineage["dataset_dvc_md5"]},
-            description="Validation-only experimental baseline. Review per-class quality before stable approval.")
+            description="Validation-only experimental detector. Review per-class quality before stable approval.")
         receipt = verify_registration(client, name, version.version, directory)
     except Exception:
         # A registry/retrieval failure does not erase successfully logged training evidence.
