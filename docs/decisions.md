@@ -1006,3 +1006,32 @@ verification confirmed queue loading and the missing-attribution save guard;
 no production annotation was accepted during UI testing. The latest CI remains
 the earlier 58-test run. The review snapshot is unchanged because this step
 changes tooling, not annotation decisions.
+
+
+## Annotation batch 006: 18 reviewed images
+
+On 2026-10-17 the user selected continued Codex visual review in batches.
+Eight pending training images were inspected against enlarged raw images.
+Corrected all-class overlays were checked before accepting workers1031,
+workers1035, workers1036 and workers1040 (all IDs have the `hard_hat_` prefix).
+The corrections separate visible mirrored copies, add missing person boxes,
+and refine helmeted-head extents. Workers1032, workers1033, workers1039 and
+workers104 remain unresolved because cropped fragments, occlusion or missing
+head labels prevent a confident complete annotation. Their supplied boxes
+remain unaccepted drafts. No model proposal was automatically accepted.
+
+The working review now contains 18 reviewed, 26 requiring adjudication and
+3,956 pending images. The shared write lock protected the batch, and the
+journal retains every previous and resulting record with the batch method.
+All 4,000 source image/XML identities, split and policy hashes, and box
+constraints passed validation. A real incomplete-export attempt was rejected
+before creating a candidate directory. Raw metadata and baseline checkpoint
+hashes remain unchanged. Evidence is in
+`reports/annotation-batch006-validation.json`; the triage scan was refreshed.
+The prior 74-test result remains the latest local software test run; tests
+were not rerun for this annotation/documentation-only change.
+
+The six-file local DVC review snapshot is
+`829844cc7cef77e70a5e223d684903cc.dir` (10,055,946 bytes). It remains incomplete
+review evidence, not training data. No remote dataset transfer, training,
+model promotion or change to the complete-review requirement occurred.
