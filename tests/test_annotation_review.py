@@ -11,7 +11,7 @@ import cv2
 import numpy as np
 import yaml
 
-from scripts.review_annotations import check_review, digest, export_review, policy_digest, source_records
+from scripts.review_annotations import check_review, digest, export_review, make_cohort, policy_digest, source_records
 
 
 class AnnotationReviewTests(unittest.TestCase):
@@ -147,6 +147,75 @@ class AnnotationReviewTests(unittest.TestCase):
         path.write_bytes(b"changed line\r\nsecond line\r\n")
         with self.assertRaisesRegex(ValueError, "policy_sha256"):
             check_review(self.project, self.review)
+
+    def freeze_cohort(self, selection):
+        path = self.project / "data/annotation-cohort.json"
+        path.write_text(json.dumps({"schema_version": 1, "split_sha256": self.review["split_sha256"],
+                                    "selection": selection}))
+        self.review["cohort_sha256"] = digest(path)
+        return path
+
+    def test_subset_export_excludes_pending_unselected_images(self):
+        manifest_path = self.project / "data/splits.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["splits"]["train"].append("extra")
+        manifest_path.write_text(json.dumps(manifest))
+        for directory, suffix in (("images", ".png"), ("annotations", ".xml")):
+            source = self.project / "dataset" / directory / ("train1" + suffix)
+            target = source.with_name("extra" + suffix)
+            target.write_bytes(source.read_bytes().replace(b"train1", b"extra") if suffix == ".xml" else source.read_bytes())
+        self.review["split_sha256"] = digest(manifest_path)
+        self.review["records"] = source_records(self.project)
+        self.reviewed()
+        extra = next(r for r in self.review["records"] if r["image_id"] == "extra")
+        extra.update(status="pending", reviewer="", reason="", reviewed_at="")
+        self.freeze_cohort({"train": ["train1"], "validation": ["val1"]})
+        result = export_review(self.project, self.review, self.output)
+        self.assertTrue(result["ready_for_export"])
+        self.assertEqual(result["selected_images"], 2)
+        self.assertEqual(result["status_counts"]["pending"], 1)
+        self.assertEqual([p.stem for p in (self.output / "images/train").glob("*.png")], ["train1"])
+        self.assertEqual(json.loads((self.output / "selection.json").read_text()),
+                         {"train": ["train1"], "validation": ["val1"]})
+
+    def test_selected_unresolved_image_still_blocks_export(self):
+        self.reviewed()
+        self.freeze_cohort({"train": ["train1"], "validation": ["val1"]})
+        self.review["records"][1].update(status="needs_adjudication", issues=["occluded head"])
+        with self.assertRaisesRegex(ValueError, "incomplete"):
+            export_review(self.project, self.review, self.output)
+        self.assertFalse(self.output.exists())
+
+    def test_cohort_rejects_changed_missing_duplicate_and_heldout_membership(self):
+        self.reviewed()
+        path = self.freeze_cohort({"train": ["train1"], "validation": ["val1"]})
+        original = path.read_bytes()
+        path.write_bytes(original + b" ")
+        with self.assertRaisesRegex(ValueError, "Changed cohort"):
+            check_review(self.project, self.review)
+        path.unlink()
+        with self.assertRaisesRegex(ValueError, "missing"):
+            check_review(self.project, self.review)
+        for names in (["heldout1"], ["train1", "train1"], [], ["val1"]):
+            self.freeze_cohort({"train": names, "validation": ["val1"]})
+            with self.subTest(names=names), self.assertRaisesRegex(ValueError, "membership"):
+                check_review(self.project, self.review)
+
+    def test_sampling_is_reproducible_covers_strata_and_ignores_review_status(self):
+        records = []
+        for split in ("train", "validation"):
+            for i in range(20):
+                records.append({"image_id": f"{split}{i}", "split": split,
+                                "helmet_boxes": [[0, 0, 1, 1]] if i < 19 else [],
+                                "head_boxes": [] if i < 19 else [[0, 0, 1, 1]], "person_boxes": []})
+        first = make_cohort(records, "split-hash", 5, 5)
+        altered = [{**r, "status": "reviewed", "reason": "different outcomes"} for r in reversed(records)]
+        self.assertEqual(first, make_cohort(altered, "split-hash", 5, 5))
+        for split in ("train", "validation"):
+            self.assertEqual(len(first["selection"][split]), 5)
+            self.assertIn(f"{split}19", first["selection"][split])
+        with self.assertRaises(ValueError):
+            make_cohort(records, "split-hash", 1, 5)
 
 
 if __name__ == "__main__":

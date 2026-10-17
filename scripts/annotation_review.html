@@ -14,7 +14,7 @@ input[type=checkbox]{width:auto}textarea{width:100%;min-height:64px}input[type=t
 h2{font-size:17px;margin:0 0 8px}.boxrow{display:flex;justify-content:space-between;align-items:center;border-bottom:1px solid #e7ebee;padding:4px;gap:5px}.boxrow.selected{background:#dceff2}.boxrow button{padding:3px 7px}.scroll{max-height:225px;overflow:auto}#coords{display:grid;grid-template-columns:repeat(4,1fr);gap:5px}#coords input{width:100%}.legend{margin:10px 0}.helmet{color:#177a14}.head{color:#ac5200}.person{color:#007b91}.small{font-size:12px}
 @media(max-width:950px){.layout{grid-template-columns:1fr}.toolbar{gap:6px}}
 </style>
-<header><h1>Local annotation review</h1><p>Check labels on your laptop. Suggestions are drawing aids; they are never accepted automatically.</p></header>
+<header><h1>Local annotation review</h1><p>Review the selected round on your laptop. Suggestions are drafts; each selected image still needs a visual check.</p></header>
 <main>
 <div class="toolbar">
  <label>Split <select id="split"><option value="all">All (validation first)</option><option value="validation">Validation</option><option value="train">Training</option></select></label>
@@ -44,9 +44,9 @@ h2{font-size:17px;margin:0 0 8px}.boxrow{display:flex;justify-content:space-betw
   </div>
   <div class="panel"><h2>Person suggestions</h2><p class="hint">Existing model predictions only. Missed people, duplicate boxes, and merged reflections are possible. Add individual boxes, then correct them on the image.</p>
    <label>Minimum confidence <input id="confidence" type="range" min="0.05" max="0.95" step="0.05" value="0.5"><span id="confidencevalue">0.50</span></label>
-   <div id="suggestions" class="scroll"></div>
+   <button id="draftsuggestions">Add shown suggestions as draft</button><div id="suggestions" class="scroll"></div>
   </div>
-  <div class="panel"><h2>Completion</h2><p class="hint">Priority flags are clues, not confirmed errors. Unflagged images still need review. Full dataset export stays blocked until all 4,000 records are reviewed and no issues remain.</p><p class="hint">Nothing here trains a model, transfers data to cloud storage, or approves deployment.</p></div>
+  <div class="panel"><h2>Completion</h2><p class="hint">The queue shows this round's frozen selection. Export includes only those images and stays blocked until every selected image is reviewed with no open issues. Other saved reviews are retained. Sample metrics alone do not establish full model acceptance.</p><p class="hint">Nothing here trains a model, transfers data to cloud storage, or approves deployment.</p></div>
  </aside>
 </div>
 </main>
@@ -109,6 +109,18 @@ $("updatebox").onclick=()=>{if(!selected)return;const b=[0,1,2,3].map(i=>Number(
 $("deletebox").onclick=()=>{if(!selected)return;draft[selected.kind+"_boxes"].splice(selected.index,1);selected=null;modified();renderLists();draw();};
 for(const id of ["labels","proposals"])$(id).onchange=draw;
 $("confidence").oninput=()=>{$("confidencevalue").textContent=Number($("confidence").value).toFixed(2);renderLists();draw();};
+$("draftsuggestions").onclick=()=>{
+ if(!draft||!imageReady||saving)return;
+ let added=0;
+ draft.suggestions.proposed_boxes.forEach((b,i)=>{
+  if(draft.suggestions.confidence[i]<Number($("confidence").value))return;
+  const box=b.map(Math.round);
+  if(box[2]<=box[0]||box[3]<=box[1]||draft.person_boxes.some(v=>JSON.stringify(v)===JSON.stringify(box)))return;
+  draft.person_boxes.push(box);added++;
+ });
+ if(added){modified();renderLists();draw();}
+ message(`${added} draft boxes added. Check missing people, overlapping boxes and reflections before saving.`);
+};
 for(const id of ["split","status","order"])$(id).onchange=()=>{if(permitted()){for(const key of Object.keys(filters))filters[key]=$(key).value;fillQueue();selectRecord(filtered[0]);}else{for(const key of Object.keys(filters))$(key).value=filters[key];}};
 function navigate(step){if(!permitted())return;const i=filtered.findIndex(r=>r.image_id===current?.image_id);selectRecord(filtered[Math.max(0,Math.min(filtered.length-1,i+step))]);}
 $("next").onclick=()=>navigate(1);$("previous").onclick=()=>navigate(-1);

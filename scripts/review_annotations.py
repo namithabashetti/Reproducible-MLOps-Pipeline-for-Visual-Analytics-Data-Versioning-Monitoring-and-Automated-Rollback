@@ -89,6 +89,60 @@ def validate_record(row, source):
             seen.add(tuple(box))
 
 
+def make_cohort(records, split_sha256, train_count=200, validation_count=100, seed=42):
+    """Freeze a stratified sample using source labels, never predictions or review outcomes."""
+    selection, strata = {}, {}
+    for split, count in (("train", train_count), ("validation", validation_count)):
+        groups = {}
+        for row in records:
+            if row["split"] != split:
+                continue
+            key = "".join(str(int(bool(row[f"{kind}_boxes"]))) for kind in ("helmet", "head", "person"))
+            key += "-crowded" if len(row["helmet_boxes"]) + len(row["head_boxes"]) >= 6 else "-sparse"
+            groups.setdefault(key, []).append(row["image_id"])
+        total = sum(map(len, groups.values()))
+        if type(count) is not int or not len(groups) <= count <= total:
+            raise ValueError("Cohort size must cover each source stratum and fit the split")
+        quotas = {key: 1 for key in groups}
+        while sum(quotas.values()) < count:
+            eligible = [key for key in sorted(groups) if quotas[key] < len(groups[key])]
+            key = max(eligible, key=lambda k: count * len(groups[k]) / total - quotas[k])
+            quotas[key] += 1
+        selected = []
+        for key in sorted(groups):
+            ranked = sorted(groups[key], key=lambda name: sha256(f"{seed}:{split}:{name}".encode()).hexdigest())
+            selected.extend(ranked[:quotas[key]])
+        selection[split] = sorted(selected)
+        strata[split] = {key: {"population": len(groups[key]), "selected": quotas[key]} for key in sorted(groups)}
+    return {"schema_version": 1, "seed": seed, "split_sha256": split_sha256,
+            "method": "source_label_presence_and_crowding_stratified_sha256",
+            "selection": selection, "strata": strata,
+            "purpose": "Incremental development; subset metrics are not full-dataset or final-test acceptance"}
+
+
+def cohort_selection(project, review):
+    path = project / "data/annotation-cohort.json"
+    if not path.exists():
+        if review.get("cohort_sha256"):
+            raise ValueError("Frozen cohort is missing")
+        return {split: [r["image_id"] for r in review["records"] if r["split"] == split]
+                for split in ("train", "validation")}
+    if review.get("cohort_sha256") != digest(path):
+        raise ValueError("Changed cohort; reconcile explicitly instead of silently resampling")
+    cohort = json.loads(path.read_text(encoding="utf-8"))
+    if cohort.get("schema_version") != 1 or cohort.get("split_sha256") != review["split_sha256"]:
+        raise ValueError("Invalid cohort identity")
+    selection = cohort["selection"]
+    if set(selection) != {"train", "validation"}:
+        raise ValueError("Cohort must contain only train and validation")
+    for split, names in selection.items():
+        allowed = {r["image_id"] for r in review["records"] if r["split"] == split}
+        if (not isinstance(names, list) or not names or any(not isinstance(n, str) for n in names)
+                or len(names) != len(set(names)) or not set(names) <= allowed):
+            raise ValueError("Invalid cohort membership")
+    return selection
+
+
 def check_review(project, review):
     if review.get("schema_version") != 2:
         raise ValueError("Unsupported review schema")
@@ -109,8 +163,13 @@ def check_review(project, review):
         validate_record(row, source)
         counts[row["status"]] += 1
         changed += any(row[field] != source[field] for field in ("helmet_boxes", "head_boxes", "person_boxes"))
+    selection = cohort_selection(project, review)
+    selected = [by_name[name] for names in selection.values() for name in names]
+    selected_counts = Counter(r["status"] for r in selected)
     return {"images": len(rows), "status_counts": dict(counts), "changed_images": changed,
-            "ready_for_export": bool(rows) and counts["reviewed"] == len(rows)}
+            "selected_images": len(selected), "selected_status_counts": dict(selected_counts),
+            "selected_split_counts": {s: len(names) for s, names in selection.items()},
+            "ready_for_export": bool(selected) and selected_counts["reviewed"] == len(selected)}
 
 
 def export_review(project, review, output):
@@ -128,7 +187,11 @@ def export_review(project, review, output):
     classes = {"helmet": 0, "head": 1, "person": 2}
     # Recheck the same bytes consumed by conversion, not just the earlier scan.
     output.mkdir()
+    selection = cohort_selection(project, review)
+    selected_names = {name for names in selection.values() for name in names}
     for row in review["records"]:
+        if row["image_id"] not in selected_names:
+            continue
         name, split = row["image_id"], row["split"]
         image_path = project / "dataset/images" / f"{name}.png"
         xml_path = project / "dataset/annotations" / f"{name}.xml"
@@ -149,6 +212,9 @@ def export_review(project, review, output):
             yolo_labels(objects, classes, transform, size), encoding="utf-8")
     # This file is written last; interrupted exports cannot be selected as datasets.
     (output / "review.json").write_text(json.dumps(review, indent=2) + "\n", encoding="utf-8")
+    (output / "selection.json").write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
+    if review.get("cohort_sha256"):
+        shutil.copy2(project / "data/annotation-cohort.json", output / "annotation-cohort.json")
     (output / "dataset.yaml").write_text(yaml.safe_dump({
         "train": "images/train", "val": "images/validation", "names": {v: k for k, v in classes.items()}
     }, sort_keys=False), encoding="utf-8")

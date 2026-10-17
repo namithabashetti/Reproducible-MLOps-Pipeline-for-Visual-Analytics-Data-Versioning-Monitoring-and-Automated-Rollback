@@ -12,7 +12,7 @@ from pathlib import Path
 import secrets
 from urllib.parse import urlsplit
 
-from scripts.review_annotations import check_review, digest, policy_digest, validate_record
+from scripts.review_annotations import check_review, cohort_selection, digest, policy_digest, validate_record
 
 
 FIELDS = ("helmet_boxes", "head_boxes", "person_boxes")
@@ -95,7 +95,9 @@ def scan(project, folder):
     result = check_review(project, review)
     suggestions = json.loads((folder / "model-suggestions.json").read_text())
     validate_suggestions(review, suggestions)
-    queue = [rank_record(row, suggestions["records"][row["image_id"]]) for row in review["records"]]
+    selected = {name for names in cohort_selection(project, review).values() for name in names}
+    queue = [rank_record(row, suggestions["records"][row["image_id"]]) for row in review["records"]
+             if row["image_id"] in selected]
     queue.sort(key=lambda r: (r["status"] == "reviewed", r["split"] != "validation",
                               -r["priority_score"], r["image_id"]))
     counts = Counter(flag for row in queue for flag in row["flags"])
@@ -131,6 +133,9 @@ def save_decision(project, folder, request, identity):
         path = folder / "review.json"
         previous_hash = digest(path)
         review = json.loads(path.read_text())
+        if review.get("cohort_sha256") != identity.get("cohort_sha256"):
+            raise ValueError("Review cohort changed; restart and reload")
+        cohort_selection(project, review)
         for key, relative in (("split_sha256", "data/splits.json"), ("policy_sha256", "docs/annotation-policy.md")):
             actual = policy_digest(project / relative) if key == "policy_sha256" else digest(project / relative)
             if actual != identity[key] or review[key] != identity[key]:
@@ -169,6 +174,7 @@ def save_decision(project, folder, request, identity):
 def make_server(project, folder, port=8766):
     review, suggestions, report = scan(project, folder)
     identity = {"split_sha256": review["split_sha256"], "policy_sha256": review["policy_sha256"],
+                "cohort_sha256": review.get("cohort_sha256"),
                 "records": {r["image_id"]: r for r in review["records"]}}
     token = secrets.token_urlsafe(32)
 
@@ -198,10 +204,12 @@ def make_server(project, folder, port=8766):
                 return self.send(200, page.replace("__SESSION_TOKEN__", token).encode(), "text/html; charset=utf-8")
             if route == "/api/queue":
                 current = json.loads((folder / "review.json").read_text())
+                selected = {name for names in cohort_selection(project, current).values() for name in names}
                 payload = {"records": [{**r, "revision": fingerprint(r),
                                         "triage": rank_record(r, suggestions["records"][r["image_id"]]),
                                         "suggestions": suggestions["records"][r["image_id"]]}
-                                       for r in current["records"]], "scan_note": report["note"]}
+                                       for r in current["records"] if r["image_id"] in selected],
+                           "scan_note": report["note"]}
                 return self.send(200, json.dumps(payload).encode())
             if route.startswith("/image/"):
                 name = route[len("/image/"):]

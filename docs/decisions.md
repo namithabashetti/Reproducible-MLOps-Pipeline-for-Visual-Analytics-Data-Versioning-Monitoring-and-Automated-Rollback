@@ -1035,3 +1035,59 @@ The six-file local DVC review snapshot is
 `829844cc7cef77e70a5e223d684903cc.dir` (10,055,946 bytes). It remains incomplete
 review evidence, not training data. No remote dataset transfer, training,
 model promotion or change to the complete-review requirement occurred.
+
+
+## User-approved incremental annotation review (2026-10-17)
+
+The user approved replacing bulk chat review of all 4,000 train/validation
+images with a smaller corrected training subset and a fixed validation sample.
+Policy version 3 supersedes the earlier full-review export requirement. Class
+semantics, source immutability, original split membership, the three-class
+quality target and separate final-test/monitoring integrity requirements remain.
+No model-quality approval is implied by this scope change.
+
+The first round freezes 200 training and 100 validation IDs in
+`data/annotation-cohort.json`. Source helmet/head/person presence and crowding
+(six or more supplied heads/helmets) define strata. Proportional allocation with
+at least one per stratum and SHA-256 ordering using seed 42 select the IDs;
+no predictions, correction status or apparent ease influence membership.
+The manifest records population and sample counts. Source-label strata are
+approximate, and rare strata are overrepresented by the minimum allocation;
+unweighted subset metrics must not be claimed as full-validation accuracy.
+The validation sample stays fixed between rounds. Insufficient class coverage
+requires an explicitly recorded prediction-independent expansion and a fresh
+comparison of all models, never replacing difficult selected images.
+
+The 4,000 existing records are preserved exactly, including all 18 accepted
+reviews and 26 unresolved records. Three accepted and three unresolved records
+fall in the selected round; 294 selected records remain pending. The migration
+journal records the user's decision and old/new policy fingerprints without
+pretending to perform a new visual review. The prior working files are retained
+under `reports/person-review-v1/before-incremental-policy`, and the prior DVC
+snapshot `829844cc7cef77e70a5e223d684903cc.dir` remains in local cache.
+
+Export now requires every selected image to be reviewed without issues and
+writes only the selected images/labels, plus the exact selection and cohort
+provenance. Missing, changed, duplicate or held-out cohort membership is
+rejected. All original source identities still receive structural validation.
+The local editor displays the 300 selected records and can add confidence-filtered
+person suggestions as editable drafts. Loading drafts never accepts labels.
+No new inference pass, bulk chat image inspection or remote transfer was needed.
+
+All 79 local tests passed in 65.456 seconds. Tests verify sampling, cohort
+identity, blocked incomplete subset exports, exclusion of unselected images,
+and scan/browser queue membership in addition to the existing safeguards.
+The live queue contained exactly the frozen 300 IDs; JavaScript syntax passed.
+Original raw metadata and the baseline checkpoint hash remained unchanged.
+Evidence is in `reports/incremental-review-validation.json` and
+`reports/incremental-review-tests.log`. No new CI run was dispatched.
+
+The new seven-file local DVC review snapshot is
+`2d4cc7af68bbed2e21130529fbae63ac.dir`, including a copy of the cohort manifest.
+It is still incomplete annotation evidence, not a training dataset. Review the
+selected remainder locally, then export and integrate the corrected cohort into
+an isolated experiment. The baseline training entry point still stages original
+processed data; it must not be used to represent a corrected-data experiment.
+Compare the baseline and candidate on the same corrected validation subset,
+expand training only when development evidence warrants it, and keep final-test
+selection, stable approval and actual rollback validation as later gates.

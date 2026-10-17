@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: Full three-class quality remains required. Local scripts now check and prioritize all 4,000 annotation records, with a local browser editor for corrections. 18 images have reviewed corrections; 26 have recorded unresolved issues. All 74 local tests passed; the last completed CI run covered the preceding 58-test implementation. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
+**Current status: Full three-class quality remains required. The user approved incremental annotation review: 200 training and 100 fixed validation images in the first round, using the local editor. Three selected images are already reviewed, three have unresolved issues, and 294 are pending. All prior corrections are preserved. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked. The model remains experimental, with no approved rollback target.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1365,11 +1365,21 @@ The correction workflow is implemented in `scripts/review_annotations.py`, with
 the [annotation policy](docs/annotation-policy.md). It records the raw image/XML
 hashes, split and policy identities, person boxes, reviewer, timestamp and open
 issues. Schema 2 permits explicit, image-reviewed corrections to all three
-classes after a missing uncovered-head label was found. All 4,000 training and
-validation records must be reviewed before an isolated corrected dataset can be
-exported; final-test and monitoring images are excluded from this review set.
-An incomplete, stale, invalid or unresolved review cannot become a training
-dataset. Export does not train, promote a model or change the current DVC pipeline.
+classes after a missing uncovered-head label was found. Policy version 3 replaces
+the requirement to review all 4,000 images with an incremental first round of
+200 training and 100 validation images, frozen in `data/annotation-cohort.json`.
+Selection uses source class presence and crowding with seed 42, proportional
+allocation and at least one image per stratum; predictions and review outcomes
+are not selection inputs. The source strata are approximate because labels are
+incomplete. Subset metrics must not be presented as full-validation accuracy.
+All selected images must be reviewed with no open issues before export; only
+selected images enter the candidate. Unselected records remain preserved.
+Final-test and monitoring images remain excluded. Compare baseline and candidate
+on the same corrected validation subset and retain it across rounds. Expand
+training based on development results; record any necessary validation expansion
+before reevaluating all compared models. Final-test integrity review and the
+three-class model-quality requirement remain unchanged.
+Export does not train, promote a model or change the current DVC pipeline.
 
 `reports/person-review-v1/review.json` currently contains 18 image/overlay-reviewed
 corrections, 26 images requiring adjudication of reflected/cropped fragments or
@@ -1388,12 +1398,15 @@ not an independent annotation team. These selected examples do not establish a
 dataset-wide correction rate. No corrected dataset has been exported, no new
 training has started, and no stable alias has been assigned.
 
-Nine annotation-workflow tests check incomplete reviews, unresolved issues, source/policy/split
+Thirteen annotation-workflow tests check incomplete reviews, unresolved issues, source/policy/split
 changes, invalid boxes, review attribution, held-out injection, output isolation,
 and real conversion preserving source files, explicit head corrections, and
 rejection of unreconciled legacy reviews, and policy identity across Git newline
 conversion. Policy text hashes normalize line endings; image/XML hashes remain
-byte-exact. All 67 local tests passed in 36.103 seconds. The user explicitly retained full three-class quality acceptance;
+byte-exact. Tests also check frozen cohort identity, deterministic stratification,
+selected unresolved records, and exclusion of unselected images from export.
+All 79 local tests passed in 65.456 seconds after the incremental workflow change.
+The user explicitly retained full three-class quality acceptance;
 the existing baseline is not approved for a limited demonstration. Corrected
 data review, isolated retraining, comparative evaluation, stable approval and
 actual rollback/post-rollback validation remain necessary.
@@ -1405,10 +1418,10 @@ labels. The checkpoint, image hashes and inference settings are recorded. No
 test or monitoring images are used. Suggestions and structural checks cannot
 establish that a complete, accurate annotation review has occurred.
 
-Suggestions now cover all 4,000 training/validation images. A six-file local DVC
+Suggestions now cover all 4,000 training/validation images. A seven-file local DVC
 snapshot (`data/annotation-review.dvc`, MD5
-`829844cc7cef77e70a5e223d684903cc.dir`) preserves the review, policy, journal,
-suggestions, suggestion generator and explicit incomplete status. It is **not
+`2d4cc7af68bbed2e21130529fbae63ac.dir`) preserves the review, policy, journal,
+frozen cohort, suggestions, suggestion generator and explicit incomplete status. It is **not
 training data** and is not referenced by the training pipeline. The snapshot is
 in the local DVC cache; this step did not push it to Google Drive. The working
 review remains under `reports/person-review-v1/`. Retain old snapshots and update
@@ -1435,14 +1448,16 @@ and label coordinate. It checks suggestion coverage and image fingerprints,
 then writes `reports/person-review-v1/triage.json`. Heuristic flags cover unmatched
 person predictions, head/helmet boxes without person coverage, class overlaps,
 near-duplicates, crowded scenes, border fragments and existing open issues.
-Validation images come first, then higher-priority flags. Prediction confidence
+The queue contains only the frozen cohort. Validation images come first, then higher-priority flags. Prediction confidence
 is not annotation accuracy; flags can be false positives, and unflagged images
 are not automatically verified. The initial scan flagged 3,996 images, including
 3,486 with unmatched person suggestions at confidence >= 0.5 and IoU < 0.5.
 
 In the editor, filter by split/status and optionally choose **Fewest boxes first**.
 Drag to draw boxes, select **Edit** to adjust coordinates, or add individual
-person suggestions and correct their extents. Enter a reviewer name and note.
+person suggestions and correct their extents. **Add shown suggestions as draft**
+adds the suggestions above the displayed confidence threshold without accepting
+them; remove duplicate/merged boxes and add missed people. Enter a reviewer name and note.
 **Save as reviewed** requires explicit confirmation that all three classes and
 the full image were checked; **Save unresolved** records the remaining issue.
 The server saves directly to the working review JSON and appends before/after
@@ -1452,11 +1467,19 @@ write requests are rejected. The server exposes only this editor, its queue and
 the allowlisted training/validation images, not the project filesystem.
 
 `scan` never changes review status or writes proposed labels into the correction
-file. This workflow changes the review tools, not the frozen annotation policy
-or export gate: all 4,000 records still need an explicit completed review. The
+file. The export gate now applies to every image in the frozen selected round.
+The manifest hash detects accidental resampling; explicit reconciliation and
+an audit entry are required to change it. Prior review timestamps and decisions
+were retained during the user-approved version-3 policy migration. The
 editor does not train, promote, upload or modify original images/XML. Refresh
 the scan and update the separate local DVC snapshot after a completed review
 batch; live browser saves do not automatically rewrite `data/annotation-review`.
-Seven new tests cover read-only triage, source/suggestion identity, explicit
+Eight triage tests cover read-only triage, source/suggestion identity, explicit
 acceptance, retained history, invalid/stale saves, and local HTTP access controls.
-All 74 local tests passed in 55.013 seconds; no new CI run was dispatched.
+The live editor queue was checked against all 300 frozen IDs, and its JavaScript
+passed a syntax check. Three selected images are reviewed, three unresolved and
+294 pending. No new CI run was dispatched; the last completed CI run covered
+the preceding 58-test implementation. The next step is local review of the
+remaining selected images, followed by an isolated corrected export and training
+integration. The existing training command still uses the original baseline
+inputs; do not use it to claim a corrected-label experiment.

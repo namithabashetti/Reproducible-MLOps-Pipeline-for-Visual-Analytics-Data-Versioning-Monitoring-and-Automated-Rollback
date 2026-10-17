@@ -137,6 +137,35 @@ class AnnotationTriageTests(unittest.TestCase):
         with urlopen(Request(base + "/api/decision", data=data, headers=headers)) as response:
             self.assertEqual(json.load(response)["status"], "reviewed")
 
+    def test_frozen_cohort_limits_scan_and_browser_queue(self):
+        manifest_path = self.project / "data/splits.json"
+        manifest = json.loads(manifest_path.read_text())
+        manifest["splits"]["train"].append("extra")
+        manifest_path.write_text(json.dumps(manifest))
+        for directory, suffix in (("images", ".png"), ("annotations", ".xml")):
+            original = self.project / "dataset" / directory / ("a" + suffix)
+            target = original.with_name("extra" + suffix)
+            content = original.read_bytes()
+            target.write_bytes(content.replace(b"a.png", b"extra.png") if suffix == ".xml" else content)
+        self.review.update(split_sha256=digest(manifest_path), records=source_records(self.project))
+        cohort = self.project / "data/annotation-cohort.json"
+        cohort.write_text(json.dumps({"schema_version": 1, "split_sha256": self.review["split_sha256"],
+                                      "selection": {"train": ["a"], "validation": ["b"]}}))
+        self.review["cohort_sha256"] = digest(cohort)
+        (self.folder / "review.json").write_text(json.dumps(self.review))
+        extra = next(r for r in self.review["records"] if r["image_id"] == "extra")
+        self.suggestions["records"]["extra"] = {"image_sha256": extra["image_sha256"],
+                                                  "proposed_boxes": [], "confidence": []}
+        (self.folder / "model-suggestions.json").write_text(json.dumps(self.suggestions))
+        _, _, report = scan(self.project, self.folder)
+        self.assertEqual({r["image_id"] for r in report["queue"]}, {"a", "b"})
+        server = make_server(self.project, self.folder, 0)
+        threading.Thread(target=server.serve_forever, daemon=True).start()
+        self.addCleanup(server.server_close); self.addCleanup(server.shutdown)
+        with urlopen(f"http://127.0.0.1:{server.server_port}/api/queue") as response:
+            self.assertEqual({r["image_id"] for r in json.load(response)["records"]}, {"a", "b"})
+        self.assertEqual(len(json.loads((self.folder / "review.json").read_text())["records"]), 3)
+
 
 if __name__ == "__main__":
     unittest.main()

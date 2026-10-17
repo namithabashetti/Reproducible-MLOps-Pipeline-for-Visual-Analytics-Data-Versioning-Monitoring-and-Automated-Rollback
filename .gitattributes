@@ -1,0 +1,2 @@
+# Preserve the exact bytes of the manifest bound to the DVC review by SHA-256.
+data/annotation-cohort.json -text whitespace=cr-at-eol
