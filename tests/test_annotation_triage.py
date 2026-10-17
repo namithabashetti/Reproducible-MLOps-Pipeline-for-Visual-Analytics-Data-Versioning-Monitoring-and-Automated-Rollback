@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from PIL import Image
 
-from scripts.annotation_triage import fingerprint, make_server, rank_record, save_decision, scan
+from scripts.annotation_triage import fingerprint, make_server, rank_record, save_decision, scan, training_draft
 from scripts.review_annotations import check_review, digest, export_review, policy_digest, source_records
 
 
@@ -165,6 +165,28 @@ class AnnotationTriageTests(unittest.TestCase):
         with urlopen(f"http://127.0.0.1:{server.server_port}/api/queue") as response:
             self.assertEqual({r["image_id"] for r in json.load(response)["records"]}, {"a", "b"})
         self.assertEqual(len(json.loads((self.folder / "review.json").read_text())["records"]), 3)
+
+    def test_training_draft_excludes_validation_and_never_changes_review(self):
+        original = deepcopy(self.review)
+        result = training_draft(self.review, self.suggestions)
+        self.assertEqual([r['image_id'] for r in result['records']], ['a'])
+        self.assertEqual(result['summary']['added_person_boxes'], 1)
+        self.assertEqual(self.review, original)
+        self.assertEqual(result['status'], 'unverified_training_proposal_not_ground_truth')
+        self.suggestions['records']['a']['image_sha256'] = 'stale'
+        with self.assertRaisesRegex(ValueError, 'Stale suggestion'):
+            training_draft(self.review, self.suggestions)
+
+    def test_draft_rejects_weak_unsupported_merged_and_duplicate_boxes(self):
+        for case in ('weak', 'unsupported', 'merged', 'duplicate'):
+            review, suggestions = deepcopy(self.review), deepcopy(self.suggestions)
+            row, proposal = review['records'][0], suggestions['records']['a']
+            if case == 'weak': proposal['confidence'] = [.69]
+            if case == 'unsupported': proposal['proposed_boxes'] = [[12, 10, 19, 19]]
+            if case == 'merged': row['head_boxes'] = [[5, 10, 9, 14]]
+            if case == 'duplicate': row['person_boxes'] = [[2, 2, 14, 19]]
+            with self.subTest(case=case):
+                self.assertEqual(training_draft(review, suggestions)['summary']['added_person_boxes'], 0)
 
 
 if __name__ == "__main__":

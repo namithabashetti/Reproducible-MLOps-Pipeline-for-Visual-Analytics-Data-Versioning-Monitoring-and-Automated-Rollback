@@ -1436,6 +1436,31 @@ credible validation labels. No further training run, final-test evaluation,
 stable promotion or deployment was triggered by this comparison. The original
 baseline remains preserved; actual approved-model rollback remains unverified.
 
+### Unverified person-label training draft
+
+`scripts.annotation_triage draft` prepares proposed additions using the existing
+local pretrained-model suggestions, without another inference run. It selects
+only training records, requires confidence >= 0.70 and at least 80% coverage of
+exactly one supplied head/helmet box, and rejects IoU >= 0.50 overlap with an
+existing or already selected person box. These filters are heuristics, not proof
+that a proposed box or its extent is correct.
+
+The generated `reports/person-review-v1/training-draft.json` contains 5,004
+additional boxes across 2,421 training images. Combined with existing labels,
+2,546 training images would have person boxes, but 11,806 supplied head/helmet
+boxes would still lack person coverage. Confidence thresholds 0.50, 0.70 and
+0.90 were compared for proposal counts only; no threshold was selected using
+validation-model accuracy.
+
+The draft preserves source and review-record fingerprints, suggestion identity,
+generator identity, confidence scores and explicit unverified status. It changes
+no current labels or review statuses and contains no validation, test or monitoring
+proposals. The command refuses to overwrite an existing draft. Using these
+proposals for a new experimental training dataset is a different data decision
+from accepting the existing labels as-is. No such training run has started.
+The focused 25-test annotation suite passes, including draft isolation and
+rejection of stale, weak, unsupported, merged and duplicate proposals.
+
 ### Local editor and verification
 
 ```powershell

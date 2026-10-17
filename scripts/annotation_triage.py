@@ -113,6 +113,45 @@ def scan(project, folder):
     return review, suggestions, report
 
 
+def training_draft(review, suggestions):
+    """Prepare unverified training additions; never relabel validation or accept a review."""
+    validate_suggestions(review, suggestions)
+    records, totals = [], Counter()
+    for row in review["records"]:
+        if row["split"] != "train":
+            continue
+        heads = row["helmet_boxes"] + row["head_boxes"]
+        proposal = suggestions["records"][row["image_id"]]
+        additions, scores = [], []
+        for box, confidence in sorted(zip(proposal["proposed_boxes"], proposal["confidence"]),
+                                      key=lambda pair: -pair[1]):
+            if confidence < .7:
+                continue
+            if any(iou(box, existing) >= .5 for existing in row["person_boxes"] + additions):
+                continue
+            # Reject proposals with no head support or potentially merged people.
+            if sum(intersection(head, box) / area(head) >= .8 for head in heads) != 1:
+                continue
+            additions.append(box)
+            scores.append(confidence)
+        combined = row["person_boxes"] + additions
+        uncovered = sum(not any(intersection(head, box) / area(head) >= .8 for box in combined)
+                        for head in heads)
+        records.append({"image_id": row["image_id"], "split": "train",
+                        "image_sha256": row["image_sha256"], "xml_sha256": row["xml_sha256"],
+                        "review_record_sha256": fingerprint(row), "added_person_boxes": additions,
+                        "confidence": scores, "uncovered_head_or_helmet_boxes_after": uncovered})
+        totals.update(images_with_additions=int(bool(additions)), added_person_boxes=len(additions),
+                      existing_person_boxes=len(row["person_boxes"]),
+                      images_with_person_after=int(bool(combined)), uncovered_heads_after=uncovered)
+    return {"status": "unverified_training_proposal_not_ground_truth", "training_images": len(records),
+            "settings": {"confidence_min": .7, "duplicate_iou": .5, "head_coverage_min": .8,
+                         "supported_heads_per_proposal": 1},
+            "summary": dict(totals), "records": records,
+            "limitations": "Filters are heuristics; false positives, missed people and merged/cropped copies remain possible. "
+                           "No review status or training labels were changed. No validation, test or monitoring proposals are included."}
+
+
 def save_decision(project, folder, request, identity):
     """Apply one explicit local review, with conflict detection and retained history."""
     required = {"image_id", "expected_record", "reviewer", "reason", "status", "issues", "attested", *FIELDS}
@@ -240,7 +279,7 @@ def make_server(project, folder, port=8766):
 
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
-    parser.add_argument("command", choices=("scan", "serve"))
+    parser.add_argument("command", choices=("scan", "serve", "draft"))
     parser.add_argument("--review", type=Path, default=Path("reports/person-review-v1"))
     parser.add_argument("--port", type=int, default=8766)
     args = parser.parse_args()
@@ -248,7 +287,19 @@ def main():
     folder = args.review.resolve()
     if not folder.is_relative_to(project / "reports") or folder == project / "reports":
         parser.error("Review must be a folder under reports")
-    if args.command == "scan":
+    if args.command == "draft":
+        review = json.loads((folder / "review.json").read_text())
+        check_review(project, review)
+        suggestions = json.loads((folder / "model-suggestions.json").read_text())
+        report = training_draft(review, suggestions)
+        report.update(created_at=datetime.now(timezone.utc).isoformat(),
+                      review_sha256=digest(folder / "review.json"),
+                      suggestions_sha256=digest(folder / "model-suggestions.json"),
+                      generator_sha256=digest(Path(__file__)))
+        with (folder / "training-draft.json").open("x", encoding="utf-8") as stream:
+            stream.write(json.dumps(report, indent=2) + "\n")
+        print(json.dumps({k: v for k, v in report.items() if k != "records"}, indent=2))
+    elif args.command == "scan":
         _, _, report = scan(project, folder)
         print(json.dumps({k: v for k, v in report.items() if k != "queue"}, indent=2))
     else:

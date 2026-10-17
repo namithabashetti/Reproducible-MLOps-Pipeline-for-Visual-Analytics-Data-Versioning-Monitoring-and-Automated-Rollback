@@ -1194,3 +1194,40 @@ MLflow receipt. The next quality intervention is person-label completeness and
 credible validation labels. Previously required stable approval and an actual
 approved-model rollback remain unresolved. This reporting-only checkpoint did
 not rerun the already passing 82-test software suite or dispatch CI.
+
+
+## Training-only person proposal draft (2026-10-17)
+
+After the unsuccessful full-training comparison, the user requested continuing.
+A script-only analysis reused the existing 4,000-image generic-person suggestions;
+no new model inference, image review in chat, or dataset download was performed.
+Confidence cutoffs 0.50, 0.70 and 0.90 were compared using training proposal counts,
+not validation accuracy. At 0.70, candidates must cover at least 80% of exactly
+one supplied head/helmet box and avoid IoU >= 0.50 overlap with existing or
+already selected person boxes. These are conservative drawing heuristics, not
+verified annotation-accuracy criteria.
+
+`annotation_triage draft` now writes a separate, non-overwriting proposal file
+with explicit unverified status, source image/XML identities, existing review
+record fingerprints, prediction confidence, suggestion identity and generator
+identity. It excludes validation, test and monitoring proposals and does not
+change any current labels or review statuses. The 25-test focused annotation
+suite passed, including isolation and stale/weak/unsupported/merged/duplicate
+proposal rejection. The preceding full software suite remains 82 tests; no new
+full suite or CI run was needed for this isolated proposal utility.
+
+The actual draft contains 5,004 proposed new boxes across 2,421 training images.
+With the existing 549 person boxes, the proposed data would have person boxes in
+2,546 training images. However, 11,806 head/helmet boxes would still lack person
+coverage; this is not a complete label repair. At confidence 0.50 the analogous
+counts are 6,783 additions and 10,039 uncovered heads; at 0.90 they are 416
+additions and 16,392 uncovered heads. These are coverage heuristics, not accuracy.
+
+The saved draft's record fingerprints match the unchanged current review and
+its SHA-256 matches the review preserved in the full-training export. The draft
+is `reports/person-review-v1/training-draft.json`; the threshold-count analysis
+is `reports/person-review-v1/draft-threshold-analysis.json`. A model-generated
+training experiment would change labels from the as-is version previously
+approved by the user. No draft was treated as reviewed ground truth, no training
+experiment using these additions was started, and experimental version 2 and
+its unassigned registry aliases remain unchanged.
