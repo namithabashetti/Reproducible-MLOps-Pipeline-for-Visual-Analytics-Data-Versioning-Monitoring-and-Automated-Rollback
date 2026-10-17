@@ -1157,3 +1157,40 @@ artifacts under `artifacts/training/fulltrain-v1`. A launch is not a completed
 run or successful training result. After completion, compare all three classes
 on the same validation inputs; stable approval and actual rollback verification
 remain separate unresolved requirements.
+
+
+## Completed full-training comparison (2026-10-17)
+
+`fulltrain-v1` finished all 30 epochs on 3,500 training images with finite losses.
+Epoch history recorded 5656.290 seconds through the final epoch.
+The completion importer registered experimental `hard-hat-detector` version 2,
+run `514b767c14e9487fb039e822857d8b2c`. Checkpoint SHA-256 is
+`7d449a571b97f0e93601f8008a2adc79fcf6ad544fd4912466dafdebe4d9a3db`.
+Post-completion verification checked run history, source/candidate provenance,
+staged image and label hashes, registry state and retrieved local MLflow artifact
+hashes. Registry aliases remain empty; no stable or previous-stable was assigned.
+
+The baseline and candidate used exactly the same fixed 100 validation images and
+labels (200 matching file hashes). Baseline weights remain unchanged. Aggregate
+AP50 decreased from 0.64500145 to 0.63858392; AP50-95 decreased from 0.41395757 to
+0.41141621. Helmet AP50 changed from 0.96587 to 0.96438 and AP50-95 from 0.65679
+to 0.65980. Head AP50 improved from 0.89121 to 0.91183 and AP50-95 from 0.54821
+to 0.55614. Person AP50 decreased from 0.07792 to 0.03954 and AP50-95 from
+0.03687 to 0.01831; reported person recall is zero for both models. Baseline
+person precision of 1.0 alongside zero recall is not evidence of successful
+person detection.
+
+Decision: retain version 2 as experimental; full three-class quality is not
+accepted. Acceptance of training labels as-is did not repair the underlying
+annotation gaps. Person labels appear in only five validation images (30 boxes),
+while 95 images retain head/helmet boxes without person boxes, so the comparison
+also has a material ground-truth limitation. No independent label-quality claim,
+full-validation claim or final-test estimate is made. There was no automatic
+retraining, final-test/monitoring evaluation, deployment or alias promotion.
+
+Evidence: `reports/fulltrain-v1-comparison.json`,
+`reports/fulltrain-v1-comparison-verification.log`, and the run's metrics and
+MLflow receipt. The next quality intervention is person-label completeness and
+credible validation labels. Previously required stable approval and an actual
+approved-model rollback remain unresolved. This reporting-only checkpoint did
+not rerun the already passing 82-test software suite or dispatch CI.

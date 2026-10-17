@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: The user requested all 3,500 training images. The candidate preserves 213 reviewed training records and accepts 3,287 training records as-is; the fixed 100-image validation set has completed review records. Known person-label gaps remain. All 82 local tests pass. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
+**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 82 tests. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1408,11 +1408,33 @@ learning rate 0.001. It does not tune against the final test or alter model-qual
 requirements. Progress is written under `artifacts/training/fulltrain-v1` and the
 local training logs under `reports/`.
 
-The original baseline has been evaluated against the same fixed validation labels
-at `artifacts/comparisons/fulltrain-v1-baseline/metrics.json`. Its person AP50 on
-this subset is 0.07792 and recall is zero at the evaluator's reported operating
-point. The candidate must be compared on those same inputs after training. These
-are subset development metrics, not a full-validation or final-test claim.
+The completed experiment has 30 consecutive epochs with finite training losses.
+It is MLflow model version **2**, run `514b767c14e9487fb039e822857d8b2c`, with
+checkpoint SHA-256 `7d449a571b97f0e93601f8008a2adc79fcf6ad544fd4912466dafdebe4d9a3db`.
+The registry evidence and every staged input hash were verified after completion.
+Both registry aliases remain unassigned; registration is experimental.
+
+The baseline comparison at `artifacts/comparisons/fulltrain-v1-baseline/metrics.json`
+uses exactly the same 100 validation images and labels, verified by hashes.
+The comparison is saved in `reports/fulltrain-v1-comparison.json`:
+
+| Class | Baseline AP50 | Version 2 AP50 | Baseline AP50–95 | Version 2 AP50–95 |
+| --- | ---: | ---: | ---: | ---: |
+| Helmet | 0.96587 | 0.96438 | 0.65679 | 0.65980 |
+| Head | 0.89121 | 0.91183 | 0.54821 | 0.55614 |
+| Person | 0.07792 | 0.03954 | 0.03687 | 0.01831 |
+
+Aggregate AP50 decreased from 0.64500 to 0.63858, and AP50–95 from 0.41396 to
+0.41142. Person recall remains zero at the reported operating point. Head metrics
+improved, while helmet results are mixed. Full three-class quality is **not
+accepted**. These are subset development metrics on user-attested labels, not
+a full-validation or final-test claim. The 95 validation images with head/helmet
+labels but no person boxes remain a material measurement limitation.
+
+The next quality step is repairing person-label completeness and establishing
+credible validation labels. No further training run, final-test evaluation,
+stable promotion or deployment was triggered by this comparison. The original
+baseline remains preserved; actual approved-model rollback remains unverified.
 
 ### Local editor and verification
 
