@@ -1268,3 +1268,10 @@ remain unresolved. No remote data transfer or deployment is part of this step.
 Local DVC versioning completed with a clean status: the assisted candidate is
 c236707aee7f98065beb71cee79e6702.dir (7,206 files, 929,788,121 bytes), and the
 base annotation audit snapshot is bd3e105ebbcfe69a83c92e3c533cb17b.dir.
+
+Launch verified on 2026-10-18: assisted-fulltrain-v1 reached epoch 1/30 on CUDA.
+Its source commit is c173612f9932202379d3740c36a6d80a4793493d with a clean working tree at
+snapshot time. Staged membership is exactly 3,500 training / 100 validation;
+all 200 validation input hashes match fulltrain-v1, and the staged proposal hash
+matches the approved draft. Training and evaluation results are pending. Evidence:
+reports/assisted-fulltrain-validation.json and the run lineage and training logs.

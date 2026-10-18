@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 87 tests. A separate experiment with 5,004 user-approved, unverified person-box additions is being prepared. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
+**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 87 tests. A separate experiment with 5,004 user-approved, unverified person-box additions is now running as assisted-fulltrain-v1 (30 epochs requested; results pending). Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
