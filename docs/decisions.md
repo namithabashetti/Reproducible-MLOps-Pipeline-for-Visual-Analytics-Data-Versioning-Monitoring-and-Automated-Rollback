@@ -1306,3 +1306,27 @@ performed. The original stable-approval and actual rollback requirements remain
 unresolved. Evidence: reports/assisted-fulltrain-v1-comparison.json and
 reports/assisted-fulltrain-v1-registration-verification.log. This reporting step
 did not rerun the already passing 87-test suite or dispatch CI.
+
+
+## Separate validation completeness review (2026-10-18)
+
+The user selected manual correction in the local editor to minimize token use.
+Created reports/validation-review-v1 from the existing base review without
+changing coordinates or training records. Only the fixed 100 validation records
+are reopened as pending; each prior attestation is preserved in the new journal,
+and the source review remains unchanged. Existing exports and experiment results
+remain immutable. No generated predictions were accepted as validation truth.
+
+The prediction-independent geometry audit found 95 images with no person boxes
+and 465 head/helmet boxes without >=80% person-box coverage across 99 images.
+These are heuristic warnings, not visual findings. All 100 fixed validation images
+remain in scope. Structural validation passed and correctly reports export as
+blocked until the selected validation decisions are completed. The editor uses
+the existing drawing and journal workflow. The initial queue contains exactly
+100 pending validation images and no pending training images.
+
+Next: the user corrects and saves the validation decisions locally. Then validate
+and version a new export, and reevaluate baseline, fulltrain-v1 and
+assisted-fulltrain-v1 on identical corrected validation labels. No retraining,
+model promotion, remote transfer or final-test evaluation is authorized by this
+preparation step itself. No implementation code changed or test suite rerun.

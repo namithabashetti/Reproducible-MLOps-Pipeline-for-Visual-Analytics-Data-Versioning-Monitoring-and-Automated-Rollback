@@ -1519,6 +1519,33 @@ monitoring data was used. Evidence is in
 `reports/assisted-fulltrain-v1-comparison.json` and
 `reports/assisted-fulltrain-v1-registration-verification.log`.
 
+### Validation completeness review in progress
+
+After version 3's comparison, the user chose local visual corrections to reduce
+chat token usage. The separate workspace `reports/validation-review-v1` reopens
+exactly the same 100 validation images, preserving previous attestations in its
+journal. Training records and all coordinates are initially unchanged; the
+previous reviews, datasets and model results remain intact.
+
+The audit found 95 images with no person boxes and 465 head/helmet boxes lacking
+80% coverage by a person box across 99 images. These are inspection flags, not
+automatically confirmed errors. Inspect every selected image, including the one
+without this flag. Model suggestions are optional drafts, not verified labels.
+
+Start or resume this review with:
+
+```powershell
+.\.venv\Scripts\python.exe -m scripts.annotation_triage serve --review reports/validation-review-v1 --port 8766
+```
+
+Open `http://127.0.0.1:8766`, choose **Validation** and **Needs review**, and check
+all visible people and the head/helmet labels. Add missing person boxes, repair
+incorrect boxes, enter a meaningful note, and save as reviewed only after checking
+the full image. Use **Save unresolved** when uncertain. Saved work persists locally.
+The initial queue has 100 images; all need a completed decision before export.
+After correction, version the new labels and reevaluate all three existing models
+on those same labels before considering another training run or model promotion.
+
 ### Local editor and verification
 
 ```powershell
