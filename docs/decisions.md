@@ -1275,3 +1275,34 @@ snapshot time. Staged membership is exactly 3,500 training / 100 validation;
 all 200 validation input hashes match fulltrain-v1, and the staged proposal hash
 matches the approved draft. Training and evaluation results are pending. Evidence:
 reports/assisted-fulltrain-validation.json and the run lineage and training logs.
+
+
+## Machine-assisted experiment completion (2026-10-18)
+
+All 30 epochs completed (4,735.5 seconds recorded in epoch history). The final
+best-checkpoint evaluation and separate registry verification succeeded.
+MLflow version 3, run 278cee189aeb46a4a86eb2e55543f0d6, retains experimental
+status with no registry aliases. Checkpoint SHA-256 is
+ac5283d9471fba7d10b0bcb1f57c4d0d947ce9158f8be41abcaa5e1796f7a6bc;
+artifact bundle SHA-256 is
+cbe0df08bf1d49f83357fa8cb0696e9176922ea583aef81faf17a29bd80969d0.
+Verification covers source snapshots, staged image/label hashes, proposal
+provenance, epoch history, registered metrics and retrieved artifacts.
+
+All 200 validation image/label hashes match fulltrain-v1 and the baseline
+comparison. Original baseline and fulltrain-v1 checkpoint hashes are unchanged.
+Compared with fulltrain-v1, aggregate AP50 changed from 0.63858392 to 0.63474298
+and AP50-95 from 0.41141621 to 0.40664251. Helmet AP50 is 0.96107, head AP50
+0.90462, and person AP50 0.03854. Person recall increased from 0 to 0.20, but
+person precision is only 0.03538 and AP50 is below the prior 0.03954.
+
+Decision: keep version 3 experimental; full three-class quality is not accepted.
+The incomplete person validation labels (30 boxes in five images) limit the
+interpretation of these metrics. Establishing credible validation annotations is
+necessary before further model selection; repeating training or treating
+predictions as reviewed ground truth would not establish acceptance. No test or
+monitoring evaluation, stable promotion, deployment or remote data transfer was
+performed. The original stable-approval and actual rollback requirements remain
+unresolved. Evidence: reports/assisted-fulltrain-v1-comparison.json and
+reports/assisted-fulltrain-v1-registration-verification.log. This reporting step
+did not rerun the already passing 87-test suite or dispatch CI.

@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 87 tests. A separate experiment with 5,004 user-approved, unverified person-box additions is now running as assisted-fulltrain-v1 (30 epochs requested; results pending). Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
+**Current status: The 30-epoch machine-assisted experiment on all 3,500 training images completed and was verified as experimental model version 3. On the same fixed 100-image validation subset, person recall rose from 0% to 20%, but person AP50 changed from 3.95% to 3.85% and overall AP50 from 63.86% to 63.47%. Full three-class quality is not accepted; training additions remain unverified and person validation labels are incomplete. All 87 software tests passed. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1494,6 +1494,30 @@ datasets are retained for comparison on identical validation inputs.
 The run uses the same pinned 30-epoch configuration and original pretrained
 weights, changing only the approved training-label additions. Existing run names
 are refused. Source snapshots and input hashes remain part of the evidence.
+
+### Machine-assisted experiment result
+
+`assisted-fulltrain-v1` completed all 30 epochs with finite training losses and
+was registered and retrieved successfully as experimental MLflow version 3.
+All 200 validation image/label hashes match both the previous experiment and
+the baseline comparison. Original checkpoints were verified unchanged.
+
+| Metric | Previous full-training model | Machine-assisted model |
+| --- | ---: | ---: |
+| Overall AP50 | 63.86% | 63.47% |
+| Overall AP50-95 | 41.14% | 40.66% |
+| Person AP50 | 3.95% | 3.85% |
+| Person precision | 0% | 3.54% |
+| Person recall | 0% | 20% |
+
+The added training boxes did not establish acceptable three-class quality.
+Person validation labels cover just 30 boxes in five images, so these metrics
+also have a material ground-truth limitation. Credible person validation labels
+are the next prerequisite for model selection; more training alone cannot resolve
+that uncertainty. No model was promoted or deployed, and no final-test or
+monitoring data was used. Evidence is in
+`reports/assisted-fulltrain-v1-comparison.json` and
+`reports/assisted-fulltrain-v1-registration-verification.log`.
 
 ### Local editor and verification
 
