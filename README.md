@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 82 tests. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
+**Current status: The 30-epoch experiment on all 3,500 training images completed and was verified as experimental model version 2. On the same fixed 100-image validation subset, person AP50 fell from 0.07792 to 0.03954 and person recall remained zero. Full three-class quality is not accepted; known person-label gaps remain. The latest local suite passed all 87 tests. A separate experiment with 5,004 user-approved, unverified person-box additions is being prepared. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -1361,7 +1361,8 @@ alone is not an established fix, and the existing model remains experimental.
 
 ## Annotation acceptance and the full-training candidate
 
-The [annotation policy](docs/annotation-policy.md), version 4, follows the user's
+The initial all-training experiment followed version 4 of the
+[annotation policy](docs/annotation-policy.md), implementing the user's
 2026-10-17 instruction to use all training images. The fixed manifest in
 `data/annotation-cohort.json` selects 3,500 training and the same 100 validation
 images used in the preceding incremental round. Final-test and monitoring images
@@ -1457,9 +1458,42 @@ generator identity, confidence scores and explicit unverified status. It changes
 no current labels or review statuses and contains no validation, test or monitoring
 proposals. The command refuses to overwrite an existing draft. Using these
 proposals for a new experimental training dataset is a different data decision
-from accepting the existing labels as-is. No such training run has started.
+from accepting the existing labels as-is. The user subsequently approved that
+experiment; its provenance and launch command are recorded below.
 The focused 25-test annotation suite passes, including draft isolation and
 rejection of stale, weak, unsupported, merged and duplicate proposals.
+
+### Approved machine-assisted experiment
+
+Policy version 5 records the user's approval to use the prepared 5,004 additional
+person boxes as experimental training labels. `apply_training_draft` creates a
+separate review rather than overwriting the base review. It checks training-only
+membership, original record/source fingerprints, counts, confidence and box
+validity. Existing person boxes and all helmet/head boxes are retained. Changed
+training records are accepted as-is with `model_generated_unverified` provenance;
+they are never marked visually reviewed because of a prediction.
+
+The derived review is `reports/person-review-assisted-v1/review.json`; its journal
+preserves before/after records. The candidate is
+`data/person-corrected-assisted-v1`, using all 3,500 training and the same 100
+validation images. It contains 5,553 training person boxes, with person boxes in
+2,546 images. The 11,806 remaining uncovered head/helmet boxes and the incomplete
+validation labels remain limitations. No final quality or stable approval follows
+from this experiment.
+
+The export includes the exact approved `training-proposal.json`. Export, staging
+and MLflow import verify its hash; the review retains proposal source hashes,
+confidence values, teacher-checkpoint identity and user authorization. All 100
+validation records stay unchanged. The baseline and fulltrain-v1 checkpoints and
+datasets are retained for comparison on identical validation inputs.
+
+```powershell
+.\.venv\Scripts\python.exe -m src.training.train --reviewed-data data/person-corrected-assisted-v1 --run-name assisted-fulltrain-v1
+```
+
+The run uses the same pinned 30-epoch configuration and original pretrained
+weights, changing only the approved training-label additions. Existing run names
+are refused. Source snapshots and input hashes remain part of the evidence.
 
 ### Local editor and verification
 
@@ -1475,8 +1509,9 @@ reason. Source identity checks, the shared write lock and the journal preserve
 provenance. Further edits require a new export/version before another experiment;
 they do not change an already exported candidate or a running experiment.
 
-All 82 local tests passed in 43.461 seconds, including training-only as-is
+All 87 local tests passed in 65.161 seconds, including training-only as-is
 acceptance, required validation review, isolated staging, cohort membership,
-input hash/provenance checks and existing lifecycle tests. Editor JavaScript
+input hash/provenance checks, separate machine-assisted derivation, exact proposal
+artifact checks and existing lifecycle tests. Editor JavaScript
 syntax passed. The last completed GitHub CI run covered the earlier 58-test
 implementation; this step has not dispatched a new CI run.

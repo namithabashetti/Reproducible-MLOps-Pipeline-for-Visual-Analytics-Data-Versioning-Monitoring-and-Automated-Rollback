@@ -106,6 +106,13 @@ def read_completed_run(directory):
             if file_hash(directory / "inputs" / name) != candidate[key]:
                 raise ValueError("Reviewed candidate provenance mismatch")
             files.append("inputs/" + name)
+        if "training_proposal_sha256" in candidate:
+            review = json.loads((directory / "inputs/review.json").read_text())
+            proposal_hash = candidate["training_proposal_sha256"]
+            if (file_hash(directory / "inputs/training-proposal.json") != proposal_hash
+                    or review.get("training_proposal", {}).get("draft_sha256") != proposal_hash):
+                raise ValueError("Training proposal provenance mismatch")
+            files.append("inputs/training-proposal.json")
         cohort = json.loads((directory / "inputs/annotation-cohort.json").read_text())
         if selected != cohort["selection"]:
             raise ValueError("Reviewed training membership differs from the frozen cohort")

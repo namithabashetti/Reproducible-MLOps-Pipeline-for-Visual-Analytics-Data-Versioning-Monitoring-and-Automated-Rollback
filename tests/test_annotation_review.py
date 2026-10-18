@@ -259,6 +259,27 @@ class AnnotationReviewTests(unittest.TestCase):
         self.assertTrue(export_review(self.project, self.review, self.output)['ready_for_export'])
         self.assertEqual(train['issues'], ['Known incomplete person labels retained'])
 
+    def test_model_assisted_export_and_staging_bind_exact_proposal_file(self):
+        from src.training.train import prepare_data
+
+        self.reviewed()
+        self.freeze_cohort({'train': ['train1'], 'validation': ['val1']})
+        proposal = self.project / 'proposal.json'
+        proposal.write_text('{"status":"unverified_test_fixture"}')
+        self.review['training_proposal'] = {'draft_sha256': digest(proposal), 'status': 'model_generated_unverified'}
+        with self.assertRaisesRegex(ValueError, 'exact approved proposal'):
+            export_review(self.project, self.review, self.output)
+        self.assertFalse(self.output.exists())
+        export_review(self.project, self.review, self.output, proposal)
+        self.assertEqual((self.output/'training-proposal.json').read_bytes(), proposal.read_bytes())
+        staged = self.project / 'assisted-staging'
+        prepare_data(self.project, staged, False, self.output)
+        self.assertEqual((staged/'training-proposal.json').read_bytes(), proposal.read_bytes())
+        (self.output/'training-proposal.json').write_text('changed')
+        with self.assertRaisesRegex(ValueError, 'proposal provenance changed'):
+            prepare_data(self.project, self.project/'bad-proposal', False, self.output)
+        self.assertFalse((self.project/'bad-proposal').exists())
+
 
 if __name__ == "__main__":
     unittest.main()

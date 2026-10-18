@@ -176,13 +176,19 @@ def check_review(project, review):
                 (r["split"] == "train" and r["status"] == "accepted_as_is") for r in selected)}
 
 
-def export_review(project, review, output):
+def export_review(project, review, output, proposal_path=None):
     output = output.resolve()
     if output.parent != (project / "data").resolve() or not re.fullmatch(
             r"person-corrected-[A-Za-z0-9_-]+", output.name):
         raise ValueError("Output must be a new data/person-corrected-* directory")
     if output.exists():
         raise FileExistsError("Export destination already exists")
+    proposal = review.get("training_proposal")
+    if proposal:
+        if proposal_path is None or digest(proposal_path) != proposal["draft_sha256"]:
+            raise ValueError("Model-assisted export requires the exact approved proposal file")
+    elif proposal_path is not None:
+        raise ValueError("Unexpected training proposal file")
     result = check_review(project, review)
     if not result["ready_for_export"]:
         raise ValueError("Review is incomplete; no candidate dataset was exported")
@@ -219,6 +225,8 @@ def export_review(project, review, output):
     (output / "selection.json").write_text(json.dumps(selection, indent=2) + "\n", encoding="utf-8")
     if review.get("cohort_sha256"):
         shutil.copy2(project / "data/annotation-cohort.json", output / "annotation-cohort.json")
+    if proposal:
+        shutil.copy2(proposal_path, output / "training-proposal.json")
     (output / "dataset.yaml").write_text(yaml.safe_dump({
         "train": "images/train", "val": "images/validation", "names": {v: k for k, v in classes.items()}
     }, sort_keys=False), encoding="utf-8")
@@ -230,6 +238,7 @@ def main():
     parser.add_argument("command", choices=("init", "check", "export"))
     parser.add_argument("--review", required=True, type=Path)
     parser.add_argument("--output", type=Path)
+    parser.add_argument("--proposal", type=Path, help="Exact approved draft for model-assisted training exports")
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[1]
     folder = args.review.resolve()
@@ -251,7 +260,7 @@ def main():
             print(json.dumps({"images": len(review["records"]), "status": "pending"}))
             return
         review = json.loads(path.read_text(encoding="utf-8"))
-        result = (export_review(project, review, args.output) if args.command == "export"
+        result = (export_review(project, review, args.output, args.proposal) if args.command == "export"
                   else check_review(project, review))
         print(json.dumps(result, indent=2))
         if not result["ready_for_export"]:

@@ -1231,3 +1231,40 @@ training experiment would change labels from the as-is version previously
 approved by the user. No draft was treated as reviewed ground truth, no training
 experiment using these additions was started, and experimental version 2 and
 its unassigned registry aliases remain unchanged.
+
+
+## Approved machine-assisted training experiment (2026-10-18)
+
+The user approved continuing with the previously prepared 5,004 additional
+machine-generated person boxes. Policy version 5 permits this separate experiment
+on all 3,500 training images and the same fixed 100 validation images. It does
+not treat predictions as visual review or as verified ground truth. The original
+base review records and the fulltrain-v1 export are preserved. The base review's
+policy identity was administratively migrated, with a journal entry and archive.
+
+The derived review appends boxes on 2,421 training images, preserves every
+existing person box and all helmet/head boxes, and marks changed records
+accepted_as_is with model_generated_unverified provenance. There are 5,553 person
+boxes across 2,546 training images; 11,806 head/helmet boxes still lack person
+coverage. Existing validation label limitations remain. All 200 validation PNG
+and TXT files match the prior candidate byte-for-byte. Raw dataset metadata is
+unchanged. No test or monitoring images are used.
+
+The exact approved proposal SHA-256 is
+5852e567bc3c1682ffdcbcf4939e3d074583748570210a8eddb6bf6250d09ec5.
+The isolated export data/person-corrected-assisted-v1 retains this proposal,
+the derived review, frozen membership and before/after journal. Export, staging
+and MLflow artifact import check proposal identity. The run also retains source
+snapshots and individual input hashes. The software suite passed all 87 tests
+in 65.161 seconds, including stale-source, held-out membership, invalid proposal,
+provenance tampering and isolation cases.
+
+The next run is assisted-fulltrain-v1 with the unchanged 30-epoch configuration,
+original YOLOv8n pretrained weights, seed 42, CUDA, image size 416 and batch 4.
+Results must be compared on the same validation inputs before any quality claim.
+Full three-class acceptance, stable approval and actual approved-model rollback
+remain unresolved. No remote data transfer or deployment is part of this step.
+
+Local DVC versioning completed with a clean status: the assisted candidate is
+c236707aee7f98065beb71cee79e6702.dir (7,206 files, 929,788,121 bytes), and the
+base annotation audit snapshot is bd3e105ebbcfe69a83c92e3c533cb17b.dir.

@@ -1,4 +1,4 @@
-# Three-class annotation correction policy, version 4
+# Three-class annotation correction policy, version 5
 
 This policy governs a separate derived correction set. The original annotation
 guidelines are unknown. It defines the intended visible-person task without
@@ -108,3 +108,16 @@ images. The 100 validation IDs remain unchanged; final-test and monitoring data
 remain excluded. Preserve version-3 evidence and record the changed training
 membership and as-is acceptance in the journal. The legacy `reviewed_at` field
 holds the acceptance timestamp for as-is records, not an image-inspection time.
+
+Version 5 records the user's approval of a separate experiment using the prepared
+5,004 machine-generated person proposals on 2026-10-17. The 3,500 training IDs and
+the fixed 100 validation IDs stay unchanged. Preserve the existing review and
+exports; create a separate derived review and candidate. Keep existing boxes,
+add only the approved training proposals, and retain their confidence, source
+fingerprints and exact draft hash. Changed training records are `accepted_as_is`
+with explicit `model_generated_unverified` provenance, never `reviewed` on the
+strength of model output. Previous issues remain recorded. Validation records,
+including labels and review attribution, must remain byte-for-byte equivalent
+as JSON values. Test and monitoring data receive no generated labels. This is an
+experimental use of unverified training labels, not ground-truth certification,
+a change to the final quality target, or authorization for stable promotion.

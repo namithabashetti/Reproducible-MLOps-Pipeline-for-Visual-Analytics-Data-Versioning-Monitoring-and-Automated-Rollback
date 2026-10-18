@@ -152,6 +152,54 @@ def training_draft(review, suggestions):
                            "No review status or training labels were changed. No validation, test or monitoring proposals are included."}
 
 
+def apply_training_draft(review, draft, draft_sha256, authorization):
+    """Derive experimental training labels, preserving the source review and validation."""
+    if draft.get("status") != "unverified_training_proposal_not_ground_truth" or not authorization.strip():
+        raise ValueError("An unverified draft and explicit user authorization are required")
+    if not isinstance(draft_sha256, str) or len(draft_sha256) != 64 or any(c not in '0123456789abcdef' for c in draft_sha256):
+        raise ValueError("Invalid draft fingerprint")
+    proposals = draft["records"]
+    training = {r["image_id"]: r for r in review["records"] if r["split"] == "train"}
+    if (len(proposals) != len(training) or len({r["image_id"] for r in proposals}) != len(proposals)
+            or {r["image_id"] for r in proposals} != set(training)):
+        raise ValueError("Draft must contain each training image exactly once and no validation images")
+    result = deepcopy(review)
+    rows = {r["image_id"]: r for r in result["records"]}
+    stamp = datetime.now(timezone.utc).isoformat()
+    additions = changed = 0
+    for proposal in proposals:
+        name = proposal["image_id"]
+        original, row = training[name], rows[name]
+        if (proposal["split"] != "train" or proposal["review_record_sha256"] != fingerprint(original)
+                or any(proposal[k] != original[k] for k in ("image_sha256", "xml_sha256"))):
+            raise ValueError("Draft source/review identity changed")
+        boxes, scores = proposal["added_person_boxes"], proposal["confidence"]
+        if len(boxes) != len(scores) or any(type(c) not in (float, int) or not math.isfinite(c) or not .7 <= c <= 1 for c in scores):
+            raise ValueError("Invalid draft confidence")
+        if not boxes:
+            continue
+        old_count = len(row["person_boxes"])
+        row["person_boxes"] += deepcopy(boxes)
+        row.update(status="accepted_as_is", reviewer="User-authorized machine-generated training labels; not visual review",
+                   reviewed_at=stamp, reason=authorization + " Added person boxes remain machine-generated and unverified.")
+        row["issues"].append("Machine-generated person additions are unverified; missed/incorrect boxes may remain.")
+        row["person_box_provenance"] = {"existing_box_count": old_count, "added_box_count": len(boxes),
+                                        "added_box_confidence": list(scores), "draft_sha256": draft_sha256,
+                                        "status": "model_generated_unverified"}
+        validate_record(row, original)
+        additions += len(boxes)
+        changed += 1
+    if additions != draft["summary"]["added_person_boxes"] or changed != draft["summary"]["images_with_additions"]:
+        raise ValueError("Draft counts disagree with its records")
+    result["training_proposal"] = {"status": "model_generated_unverified", "draft_sha256": draft_sha256,
+                                   "base_review_sha256": draft["review_sha256"],
+                                   "suggestions_sha256": draft["suggestions_sha256"],
+                                   "settings": draft["settings"], "added_boxes": additions,
+                                   "changed_training_images": changed, "authorization": authorization,
+                                   "authorized_at": stamp}
+    return result
+
+
 def save_decision(project, folder, request, identity):
     """Apply one explicit local review, with conflict detection and retained history."""
     required = {"image_id", "expected_record", "reviewer", "reason", "status", "issues", "attested", *FIELDS}

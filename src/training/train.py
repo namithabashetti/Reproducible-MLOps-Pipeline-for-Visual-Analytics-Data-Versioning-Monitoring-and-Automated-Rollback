@@ -55,6 +55,10 @@ def prepare_data(project, destination, smoke, reviewed_data=None):
         review = json.loads((source / "review.json").read_text())
         if not check_review(project, review)["ready_for_export"]:
             raise ValueError("Reviewed candidate is incomplete")
+        if review.get("training_proposal"):
+            proposal_path = source / "training-proposal.json"
+            if hashlib.sha256(proposal_path.read_bytes()).hexdigest() != review["training_proposal"]["draft_sha256"]:
+                raise ValueError("Training proposal provenance changed")
         selected_export = json.loads((source / "selection.json").read_text())
         if selected_export != cohort_selection(project, review):
             raise ValueError("Candidate selection disagrees with the frozen review")
@@ -95,6 +99,8 @@ def prepare_data(project, destination, smoke, reviewed_data=None):
     if reviewed_data is not None:
         for name in ("review.json", "annotation-cohort.json"):
             shutil.copy2(source / name, destination / name)
+        if review.get("training_proposal"):
+            shutil.copy2(source / "training-proposal.json", destination / "training-proposal.json")
         hashes = {p.relative_to(destination).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                   for category in ("images", "labels") for p in sorted((destination / category).rglob('*')) if p.is_file()}
         (destination / "input-sha256.json").write_text(json.dumps(hashes, indent=2) + "\n", encoding="utf-8")
@@ -151,6 +157,9 @@ def main():
         candidate = {"path": candidate_path.relative_to(project).as_posix(), "dvc_md5": metadata["md5"],
                      "review_sha256": hashlib.sha256((candidate_path / "review.json").read_bytes()).hexdigest(),
                      "cohort_sha256": hashlib.sha256((candidate_path / "annotation-cohort.json").read_bytes()).hexdigest()}
+        proposal = json.loads((candidate_path / "review.json").read_text()).get("training_proposal")
+        if proposal:
+            candidate.update(label_method=proposal["status"], training_proposal_sha256=proposal["draft_sha256"])
     data, counts = prepare_data(project, output / "inputs", args.smoke, args.reviewed_data)
     weights = project / "artifacts/pretrained" / training["model"]
     weights.parent.mkdir(parents=True, exist_ok=True)
@@ -162,6 +171,8 @@ def main():
     if candidate:
         sources += [pointer, project / "docs/annotation-policy.md", project / "data/annotation-cohort.json",
                     project / "scripts/review_annotations.py"]
+        if "training_proposal_sha256" in candidate:
+            sources.append(project / "scripts/annotation_triage.py")
     source_hashes = {}
     for path in sources:
         relative = path.relative_to(project)

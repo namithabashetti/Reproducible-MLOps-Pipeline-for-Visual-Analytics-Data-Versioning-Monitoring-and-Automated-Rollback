@@ -12,7 +12,7 @@ from urllib.request import Request, urlopen
 
 from PIL import Image
 
-from scripts.annotation_triage import fingerprint, make_server, rank_record, save_decision, scan, training_draft
+from scripts.annotation_triage import apply_training_draft, fingerprint, make_server, rank_record, save_decision, scan, training_draft
 from scripts.review_annotations import check_review, digest, export_review, policy_digest, source_records
 
 
@@ -187,6 +187,40 @@ class AnnotationTriageTests(unittest.TestCase):
             if case == 'duplicate': row['person_boxes'] = [[2, 2, 14, 19]]
             with self.subTest(case=case):
                 self.assertEqual(training_draft(review, suggestions)['summary']['added_person_boxes'], 0)
+
+    def approved_draft(self):
+        draft = training_draft(self.review, self.suggestions)
+        draft.update(review_sha256=digest(self.folder/'review.json'),
+                     suggestions_sha256=digest(self.folder/'model-suggestions.json'))
+        return draft
+
+    def test_approved_draft_creates_separate_unverified_training_records(self):
+        original = deepcopy(self.review)
+        result = apply_training_draft(self.review, self.approved_draft(), 'a'*64, 'User approved this experiment')
+        self.assertEqual(self.review, original)
+        self.assertEqual(result['records'][1], original['records'][1])
+        changed = result['records'][0]
+        self.assertEqual(changed['helmet_boxes'], original['records'][0]['helmet_boxes'])
+        self.assertEqual(changed['head_boxes'], original['records'][0]['head_boxes'])
+        self.assertEqual(changed['status'], 'accepted_as_is')
+        self.assertEqual(changed['person_boxes'], [[2, 2, 14, 19]])
+        self.assertEqual(changed['person_box_provenance']['status'], 'model_generated_unverified')
+        self.assertTrue(changed['issues'])
+
+    def test_apply_draft_rejects_stale_heldout_duplicate_invalid_and_unapproved_inputs(self):
+        for case in ('stale', 'heldout', 'duplicate', 'invalid_box', 'count', 'weak', 'no_authorization'):
+            draft = self.approved_draft()
+            record = draft['records'][0]
+            authorization = 'User approved this experiment'
+            if case == 'stale': record['review_record_sha256'] = 'changed'
+            if case == 'heldout': record['image_id'] = 'test'
+            if case == 'duplicate': draft['records'].append(deepcopy(record))
+            if case == 'invalid_box': record['added_person_boxes'] = [[0, 0, 21, 20]]
+            if case == 'count': draft['summary']['added_person_boxes'] = 100
+            if case == 'weak': record['confidence'] = [.69]
+            if case == 'no_authorization': authorization = ''
+            with self.subTest(case=case), self.assertRaises(ValueError):
+                apply_training_draft(self.review, draft, 'a'*64, authorization)
 
 
 if __name__ == "__main__":

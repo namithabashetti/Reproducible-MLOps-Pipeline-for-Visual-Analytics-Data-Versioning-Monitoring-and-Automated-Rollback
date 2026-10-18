@@ -1,0 +1,6 @@
+outs:
+- md5: c236707aee7f98065beb71cee79e6702.dir
+  size: 929788121
+  nfiles: 7206
+  hash: md5
+  path: person-corrected-assisted-v1

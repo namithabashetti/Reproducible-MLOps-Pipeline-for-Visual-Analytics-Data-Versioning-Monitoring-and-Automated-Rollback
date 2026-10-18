@@ -92,8 +92,18 @@ class TrackingTests(unittest.TestCase):
         lineage["reviewed_data"] = {"path": "data/person-corrected-test", "dvc_md5": "candidate.dir",
                                    "review_sha256": file_hash(directory / "inputs/review.json"),
                                    "cohort_sha256": file_hash(directory / "inputs/annotation-cohort.json")}
+        proposal_path = directory / 'inputs/training-proposal.json'
+        proposal_path.write_text('{"status":"unverified_test_fixture"}')
+        lineage['reviewed_data']['training_proposal_sha256'] = file_hash(proposal_path)
+        (directory/'inputs/review.json').write_text(json.dumps({'training_proposal': {'draft_sha256': file_hash(proposal_path)}}))
+        lineage['reviewed_data']['review_sha256'] = file_hash(directory/'inputs/review.json')
         lineage_path.write_text(json.dumps(lineage))
-        read_completed_run(directory)
+        self.assertIn('inputs/training-proposal.json', read_completed_run(directory)[4])
+        proposal_original = proposal_path.read_bytes()
+        proposal_path.write_text('changed proposal')
+        with self.assertRaisesRegex(ValueError, 'proposal provenance mismatch'):
+            read_completed_run(directory)
+        proposal_path.write_bytes(proposal_original)
         label = directory / "inputs/labels/train/a.txt"
         original = label.read_bytes()
         label.write_text("changed")
