@@ -1365,3 +1365,15 @@ work is preserved separately: 43 reviewed, 51 pending and 6 unresolved validatio
 images at this checkpoint. The optional MLflow UI launch was not completed because
 automatic approval review rejected a combined shell command as blocked by policy;
 the registry data and verified model artifacts remain available locally.
+
+## Accepted college demonstration handoff (2026-10-21)
+
+After reviewing the successful live rollback evidence and the remaining quality
+gap, the user explicitly selected: "Hand over the working college demo now,
+documenting the model-quality limitation". The current deliverable is therefore
+the functioning MLOps demonstration, not full three-class model acceptance.
+Annotation work is paused with its records and history preserved. No additional
+training or automatic acceptance of unfinished labels is performed. Main registry
+stable aliases remain unassigned; no quality approval is implied by this scope
+change. docs/demo-handoff.md records launch/restart commands, the repeatable live
+rollback demonstration, evidence locations and limitations for assessment.

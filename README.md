@@ -5,6 +5,11 @@ tracking, local serving, monitoring, and recovery. Its central rule is that drif
 is evidence for a health decision: drift alone never triggers rollback.
 
 **Current status (2026-10-21): The continuous rollback watcher passed a real Docker outage/recovery demonstration in an isolated registry: automatic predecessor restore, 3 readiness checks, 20 successful predictions, and fresh monitoring. All 89 local tests passed. The original experimental API, Prometheus and Grafana are running. Full three-class quality remains open: person detection is weak and validation correction has 43 reviewed, 51 pending and 6 unresolved images. Main-registry stable aliases remain unassigned; demo aliases do not approve model quality.**
+
+**Accepted handoff:** The user approved the working college demonstration with
+model-quality limitations documented on 2026-10-21. Start with the short
+[demo handoff guide](docs/demo-handoff.md). Annotation work is paused; this handoff
+does not claim full three-class quality or production readiness.
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -23,7 +28,7 @@ nor `previous_stable` has been assigned.
 
 ## Run and demonstrate the working system
 
-- Prediction API and interactive request form: <http://127.0.0.1:8000/docs>
+- Prediction service health: <http://127.0.0.1:8000/health> (use the handoff guide's raw-image POST example for predictions)
 - Grafana operations dashboard: <http://127.0.0.1:3000>
 - Prometheus: <http://127.0.0.1:9090>
 - MLflow registry (start separately): <http://127.0.0.1:5000>
