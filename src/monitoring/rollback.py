@@ -9,6 +9,7 @@ from pathlib import Path
 import re
 import shutil
 import subprocess
+from threading import Event
 import time
 
 import requests
@@ -221,6 +222,27 @@ def run(project, docker, *, report=None, drift=None, audit=None, latency_baselin
         return attempt
 
 
+def watch(project, docker, output, interval=30, *, stop=None, drift=None, audit=None, latency_baseline=None):
+    """Continuously collect fresh evidence; preserve the existing bounded recovery gate."""
+    if interval < 10:
+        raise ValueError("Watch interval must be at least 10 seconds")
+    stop = stop if stop is not None else Event()
+    output.parent.mkdir(parents=True, exist_ok=True)
+    previous = None
+    while not stop.is_set():
+        result = run(project, docker, drift=read_optional(drift), audit=read_optional(audit),
+                     latency_baseline=read_optional(latency_baseline))
+        result = {**result, "watch_checked_at": iso(time.time())}
+        write_receipt(output, result)
+        summary = (result["status"], result.get("reason"))
+        if summary != previous:
+            print(json.dumps({"status": summary[0], "reason": summary[1], "output": str(output)}), flush=True)
+            previous = summary
+        if result["status"] == "failed":
+            raise RuntimeError("Recovery failed; inspect the saved attempt before restarting the watcher")
+        stop.wait(interval)
+
+
 def main():
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument("--decision", type=Path, help="Fresh Phase 10 JSON; otherwise collect current evidence")
@@ -228,12 +250,25 @@ def main():
     parser.add_argument("--audit", type=Path)
     parser.add_argument("--latency-baseline", type=Path)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--watch", action="store_true", help="Repeat fresh health checks until interrupted")
+    parser.add_argument("--interval", type=int, default=30, help="Seconds between watch cycles (minimum 10)")
     parser.add_argument("--docker", default=shutil.which("docker") or str(
         Path(os.environ.get("LOCALAPPDATA", "")) / "Programs/DockerDesktop/resources/bin/docker.exe"))
     args = parser.parse_args()
+    if args.watch and args.decision:
+        parser.error("Watch mode collects fresh decisions; --decision is only for a single check")
+    if args.watch and args.interval < 10:
+        parser.error("Watch interval must be at least 10 seconds")
     if args.output.exists():
         raise FileExistsError(args.output)
     project = Path(__file__).resolve().parents[2]
+    if args.watch:
+        try:
+            watch(project, args.docker, args.output, args.interval, drift=args.drift, audit=args.audit,
+                  latency_baseline=args.latency_baseline)
+        except KeyboardInterrupt:
+            print("Rollback watch stopped.")
+        return
     result = run(project, args.docker, report=read_optional(args.decision), drift=read_optional(args.drift),
                  audit=read_optional(args.audit), latency_baseline=read_optional(args.latency_baseline))
     save(args.output, result)

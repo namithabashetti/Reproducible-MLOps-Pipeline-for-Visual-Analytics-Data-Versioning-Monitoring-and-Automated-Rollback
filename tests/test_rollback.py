@@ -16,11 +16,36 @@ from unittest.mock import MagicMock, patch
 import yaml
 
 from src.monitoring.health import evaluate, iso, model_identity
-from src.monitoring.rollback import prepare_target, recovery_images, run, validate_decision, verify_recovery
+from src.monitoring.rollback import prepare_target, recovery_images, run, validate_decision, verify_recovery, watch
 from src.serving.deploy import deploy, deployment_lock, snapshot_target, stage_model
 
 
 class RollbackTests(unittest.TestCase):
+    def test_watch_refreshes_evidence_and_stops_cooperatively(self):
+        stop = MagicMock()
+        stop.is_set.side_effect = [False, False, True]
+        output = self.root / 'watch.json'
+        drift = self.root / 'drift.json'
+        drift.write_text('{"generation": 1}')
+        def wait(_):
+            drift.write_text('{"generation": 2}')
+        stop.wait.side_effect = wait
+        with patch('src.monitoring.rollback.run', return_value={'status': 'observe'}) as runner:
+            watch(self.root, 'docker', output, 10, stop=stop, drift=drift)
+        self.assertEqual([c.kwargs['drift']['generation'] for c in runner.call_args_list], [1, 2])
+        self.assertEqual(json.loads(output.read_text())['status'], 'observe')
+        self.assertEqual(stop.wait.call_count, 2)
+
+    def test_watch_failed_recovery_stops_without_retry(self):
+        output = self.root / 'watch.json'
+        with patch('src.monitoring.rollback.run', return_value={'status': 'failed'}) as runner:
+            with self.assertRaisesRegex(RuntimeError, 'Recovery failed'):
+                watch(self.root, 'docker', output)
+        self.assertEqual(runner.call_count, 1)
+        self.assertEqual(json.loads(output.read_text())['status'], 'failed')
+        with self.assertRaises(ValueError):
+            watch(self.root, 'docker', output, 1)
+
     def setUp(self):
         self.temporary = tempfile.TemporaryDirectory()
         self.addCleanup(self.temporary.cleanup)

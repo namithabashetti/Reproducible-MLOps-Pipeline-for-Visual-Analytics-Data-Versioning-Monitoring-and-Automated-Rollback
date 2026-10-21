@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status: The 30-epoch machine-assisted experiment on all 3,500 training images completed and was verified as experimental model version 3. On the same fixed 100-image validation subset, person recall rose from 0% to 20%, but person AP50 changed from 3.95% to 3.85% and overall AP50 from 63.86% to 63.47%. Full three-class quality is not accepted; training additions remain unverified and person validation labels are incomplete. All 87 software tests passed. Pipeline acceptance remains 11 verified, 2 partial and 2 blocked; no stable model or approved rollback target exists.**
+**Current status (2026-10-21): The continuous rollback watcher passed a real Docker outage/recovery demonstration in an isolated registry: automatic predecessor restore, 3 readiness checks, 20 successful predictions, and fresh monitoring. All 89 local tests passed. The original experimental API, Prometheus and Grafana are running. Full three-class quality remains open: person detection is weak and validation correction has 43 reviewed, 51 pending and 6 unresolved images. Main-registry stable aliases remain unassigned; demo aliases do not approve model quality.**
 The dataset is split into 3,500 train, 500 validation, 500 final test, and two
 250-image monitoring pools. OpenCV produced 5,000 padded 416x416 PNGs and matching
 YOLO labels. Independent checks verified every image and all 25,502 boxes, with
@@ -20,6 +20,52 @@ model. MLflow now records this baseline as `hard-hat-detector` version 1.
 Local tracking, experimental CPU serving, and operational monitoring are verified.
 Local drift reporting, health decisions, and bounded rollback controls are implemented. Neither `stable`
 nor `previous_stable` has been assigned.
+
+## Run and demonstrate the working system
+
+- Prediction API and interactive request form: <http://127.0.0.1:8000/docs>
+- Grafana operations dashboard: <http://127.0.0.1:3000>
+- Prometheus: <http://127.0.0.1:9090>
+- MLflow registry (start separately): <http://127.0.0.1:5000>
+
+Repeat the real automatic rollback demonstration with a new output directory:
+
+```powershell
+.\.venv\Scripts\python.exe scripts/demo_rollback.py --output reports/rollback-demo-new
+```
+
+Docker Desktop and the existing monitoring containers must be running. The demo
+copies the local registry into its report directory and creates demo-only aliases.
+It deploys existing checkpoints, starts the continuous watcher, and stops the
+candidate container. Actual readiness failures cause the watcher to restore the
+recorded predecessor through the normal deployment procedure. It checks three
+readiness responses, twenty real-image predictions and fresh Prometheus samples,
+then verifies that recovery cannot ping-pong. Finally it restores the original
+experimental API. This temporarily replaces the local API; it performs no training,
+cloud transfers, or main-registry model approval.
+
+Evidence: `reports/rollback-demo-20261021/result.json`, its actual source snapshot,
+and `reports/closure-services.json`. All 89 tests passed in
+`reports/closure-tests.log`. For continuous checks after a quality-approved
+predecessor is available:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.monitoring.rollback --watch --interval 30 --output reports/rollback-watch.json
+```
+
+Use a new output path when restarting. Each cycle refreshes evidence. Failed
+recovery stops the watcher, and the existing one-attempt-per-deployment limit
+remains enforced. Missing approval, missing evidence and drift alone do not cause
+a switch. The watcher runs while its process is alive; it is not installed as a
+Windows startup service. The main registry currently has no approved target and
+correctly refuses a main-service rollback. The isolated demo proves operational
+recovery, not person-detection accuracy or full project acceptance.
+
+To open the local MLflow registry, run:
+
+```powershell
+.\.venv\Scripts\python.exe -m src.tracking.mlflow_utils serve
+```
 
 ## Approved lifecycle
 

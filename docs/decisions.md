@@ -1330,3 +1330,38 @@ and version a new export, and reevaluate baseline, fulltrain-v1 and
 assisted-fulltrain-v1 on identical corrected validation labels. No retraining,
 model promotion, remote transfer or final-test evaluation is authorized by this
 preparation step itself. No implementation code changed or test suite rerun.
+
+## Continuous rollback and live isolated demonstration (2026-10-21)
+
+The user requested urgent completion of the working system, including automated
+rollback. Added --watch to the existing bounded controller. Each cycle rereads
+optional evidence files and collects fresh health evidence. Existing deployment
+identity, approved-target, persistence, one-attempt and recovery gates remain in
+effect. Failed recovery stops the watcher for intervention; a cooperative stop is
+supported. Two new regression tests verify fresh evidence and no retry after
+failed recovery. All 89 tests passed in 78.550 seconds.
+
+scripts/demo_rollback.py exercises the actual controller, Docker and Prometheus
+against existing checkpoints. A SQLite backup under reports holds a demo-only
+registered model and aliases. Existing validation images and the existing Docker
+image are used. Main-registry aliases remain unchanged. Demo aliases are test
+fixtures, not model-quality approvals. The active watcher first verified readiness,
+then an actual container stop produced persistent readiness failures. It restored
+the recorded predecessor automatically and verified three readiness checks,
+twenty predictions and fresh Prometheus identity. A follow-up check refused
+another switch because the recovered deployment has no automatic rollback target.
+
+The demonstration passed. The original experimental API version 1 was restored
+through the normal deployment procedure. A subsequent real-image prediction,
+Prometheus up sample, Grafana database health and seven-panel dashboard check
+passed. Evidence: reports/rollback-demo-20261021/result.json and source/sha256.json,
+reports/closure-services.json and reports/closure-tests.log.
+
+This establishes live operational recovery in the isolated demonstration. It does
+not close acceptance requiring a quality-approved main-registry predecessor.
+Full three-class quality and dataset provenance remain unresolved. No final-test
+accuracy, production readiness or full project acceptance is claimed. Annotation
+work is preserved separately: 43 reviewed, 51 pending and 6 unresolved validation
+images at this checkpoint. The optional MLflow UI launch was not completed because
+automatic approval review rejected a combined shell command as blocked by policy;
+the registry data and verified model artifacts remain available locally.
