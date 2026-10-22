@@ -4,6 +4,7 @@
 
 **GO for the local college demonstration; NO-GO for production or full three-class model acceptance.**
 Final checks: 95/95 local tests, seven live dashboard panels and two real quality rollback runs passed.
+[GitHub validation run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600) also passed all 95 tests, monitoring checks and the Docker build for implementation commit `944b56f8212ca784245cd7fe1c647ef4d2894ae6`. Deployment was disabled.
 The presentation now includes actual image uploads and annotated predictions, a controlled
 quality regression, real automatic predecessor redeployment, recovery predictions and monitoring.
 Two quality rollback runs passed. The second was started from the browser on the hardened
@@ -60,7 +61,7 @@ AC and NFR mappings follow. Initial status refers to the state before this audit
 | FR-07 | Precision/Recall/mAP | Comparable evaluation | `src/training/evaluate.py` | Same fixed cohort/protocol | Partial | M: three versions and repeated baseline | Standardize comparison; report person weakness | Complete metrics; quality Partial |
 | FR-08 | MLflow experiments | Parameters, metrics, artifacts | `src/tracking/mlflow_utils.py` | Retrieved hashes, pilot logging | Complete | M, T, `E/registry.json` | None | Complete locally |
 | FR-09 | Registry stable candidate | Versioning plus quality approval | MLflow, `src/serving/deploy.py` | Registry/approval checks | Partial | Three experimental versions; main stable aliases empty | Correct labels/retrain before main promotion | Partial |
-| FR-10 | GitHub Actions CI/CD | Approved build/test/deploy | `.github/workflows/ci.yml` | Local equivalents + saved prior runs | Complete historically | Prior remote success; current local checks | Added monitoring regression to workflow; current remote run not claimed | Partial for latest revision |
+| FR-10 | GitHub Actions CI/CD | Approved build/test/deploy | `.github/workflows/ci.yml` | Actual GitHub run on the dedicated runner | Complete historically | Run 39819556600 passed for implementation commit 944b56f; deployment disabled | Monitoring regression added and executed remotely | Complete validation/build; prior deployment evidence retained |
 | FR-11 | Docker packaging | Reproducible serving image | `Dockerfile`, deployment module | Build and actual deployments | Complete | R2, build log, immutable image ID | Rebuild with decoder restriction | Complete |
 | FR-12 | FastAPI serving | Validated real predictions | `src/serving/api.py`, `console.py` | API tests, real browser upload | Complete API; Missing live UI | B, R2; original coordinates/identity | Added bounded local presentation console | Complete uploads and camera transport |
 | FR-13 | Prometheus | Actual operational metrics | API instrumentation, Compose | Fresh scrape + request counts | Complete | O and R2 recovery | None | Complete locally |
@@ -88,7 +89,7 @@ labels; the PRD names these attributes without numeric IDs.
 | AC-05 | Precision, recall, mAP | FR-07 | Fixed comparison | Partial | M | Protocol alignment performed | Complete metrics |
 | AC-06 | MLflow experiments/artifacts | FR-08 | Actual records/hashes | Complete | M,T | None | Complete |
 | AC-07 | Versioned selected model | FR-09 | Registry retrieval | Complete | `E/registry.json` | No promotion without approval | Complete registration |
-| AC-08 | GitHub workflow executes | FR-10 | Prior remote receipt/local checks | Complete historically | Prior phase CI reports | Rerun current commit remotely | Partial latest revision |
+| AC-08 | GitHub workflow executes | FR-10 | Actual dispatched workflow | Complete historically | Run 39819556600 passed; 95 tests in 174.353 s | None for implementation validation | Complete |
 | AC-09 | Docker/FastAPI serves | FR-11/12 | Browser + API | Complete | B,R2 | Hardened decoder | Complete |
 | AC-10 | Prometheus visible in Grafana | FR-13/14 | Live panel checks | Broken idle series | O | Query regression fixed | Complete |
 | AC-11 | Evidently drift analysis | FR-15 | Actual report | Complete | O | None | Complete local replay |
@@ -259,8 +260,13 @@ Raw dataset metadata, deployment and registry aliases remained unchanged.
 Do not generate extra predictions during its exact-count windows. Its acceptance section is
 limited to that runner's scope; R1/R2 supply the separate new rollback evidence.
 The monitoring regression uses the deployed Prometheus image and tests idle/active series.
-The current workflow invokes it. Previous GitHub runs remain recorded; **no new remote CI
-success for these edits is claimed**. Local compilation, dependency consistency, actionlint, JavaScript syntax, Git whitespace,
+The current workflow invokes it. [GitHub run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600)
+completed successfully on the dedicated Windows runner: **95 tests in 174.353 seconds**,
+monitoring regression and Docker build all passed. It tested implementation commit
+`944b56f8212ca784245cd7fe1c647ef4d2894ae6` with deployment set to `none`. This report update is documentation-only.
+The runner session was stopped after completion; the existing API was not redeployed.
+`E/github-run.json` and `E/github-job-119966908709.log` retain the receipt and logs.
+Local compilation, dependency consistency, actionlint, JavaScript syntax, Git whitespace,
 95 regression tests, real promtool query regression and the Docker build all passed.
 `E/final-secret-scan.json` records the final bounded source scan with zero findings.
 
@@ -375,7 +381,7 @@ in a particular live scene.
 | Implemented, not fully verified | Live camera hard-hat accuracy under real presentation conditions | Camera transport verified at 640x480 with actual API responses and successful stop; test detection with a real hard hat before presenting |
 | Not improved / inconclusive | Full-train/assisted models and batch/FP16 experiments | No superior three-class model or speed win claimed; keep measured baseline |
 | Blocked by missing evidence | Original Kaggle URL/version; complete person labels; quality-approved stable predecessor | Obtain provenance and audited labels, retrain/evaluate, then approve a main stable model |
-| External / unverified | Current Google Drive availability, latest remote GitHub workflow, full paper protocols | Prior storage/CI receipts retained; rerun when needed; no new remote success claim |
+| External / unverified | Current Google Drive availability and full paper protocols | Prior storage receipt retained; no new remote data transfer. Current GitHub implementation validation passed |
 | Not completed in this audit | Secure dependency migration, training-resume CLI, early-stopping benefit, worker/cache/AMP sweep, GPU utilization trace, real crash/power-loss injection | Not needed to demonstrate existing local flow; required as applicable before broader deployment |
 | Production blocker | Vulnerable locked dependencies and unaccepted model quality | Upgrade and regression-test the environment; establish quality gates before network/public use |
 

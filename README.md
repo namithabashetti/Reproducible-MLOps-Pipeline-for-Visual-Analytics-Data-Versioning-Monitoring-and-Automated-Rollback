@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status (2026-10-22): The local live console supports actual image uploads, annotated predictions, and a controlled quality-failure demonstration. Two real automatic rollback runs passed: serving AP50-95 42.09% → 0% → 42.09%, with predecessor redeployment, 3 readiness checks, 20 predictions and fresh monitoring. All 95 regression tests pass. Version 1 remains experimental; person quality, upstream dataset provenance and dependency-security upgrades remain open.**
+**Current status (2026-10-22): The local live console supports actual image uploads, annotated predictions, and a controlled quality-failure demonstration. Two real automatic rollback runs passed: serving AP50-95 42.09% → 0% → 42.09%, with predecessor redeployment, 3 readiness checks, 20 predictions and fresh monitoring. All 95 regression tests pass locally and in [GitHub Actions](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600); monitoring checks and Docker build also passed there. Camera capture/inference and stopping are verified. Version 1 remains experimental; person quality, upstream dataset provenance and dependency-security upgrades remain open.**
 
 **Start here:** [Live presentation and Windows commands](docs/vscode-demo.md) · [Final audit, requirement matrix and evidence](docs/final-audit.md). Open the console at <http://127.0.0.1:8767/> after starting its server. Google Drive remains the approved DVC remote.
 

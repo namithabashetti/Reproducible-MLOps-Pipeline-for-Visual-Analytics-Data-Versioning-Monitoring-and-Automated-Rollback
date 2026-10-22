@@ -32,7 +32,7 @@ the final audit. This is a local demonstration, not production acceptance.
 | Drift and health decisions | Existing PSI/KS reporting and combined health rules; drift alone cannot trigger rollback. |
 | Automatic rollback | Real container outage caused the continuous watcher to restore the predecessor automatically in an isolated demo registry. |
 | Recovery validation | Three readiness checks, twenty real-image predictions and fresh Prometheus identity passed. |
-| GitHub Actions | Existing manual validation/build/deployment workflow; latest change tested locally, no new Actions run claimed. |
+| GitHub Actions | [Run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600) passed 95 tests, monitoring checks and Docker build for commit 944b56f; deployment disabled. |
 | Local regression tests | All 95 tests passed in the final audit. |
 
 ## Open the project
