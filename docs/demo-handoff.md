@@ -1,9 +1,24 @@
-# College demonstration handoff — 21 October 2026
+# College demonstration handoff — updated 22 October 2026
 
 The user accepted a working college MLOps demonstration with model-quality
 limitations documented. This replaces full three-class model quality as the
 current handoff requirement. It does not certify model quality, approve a
 production model, or promote main-registry stable aliases.
+
+## Current presentation entry point
+
+Use [the Windows live-demo guide](vscode-demo.md) and [final audit](final-audit.md).
+Start `.\.venv\Scripts\python.exe -m src.serving.console`, then open
+<http://127.0.0.1:8767/>. Upload an image or use the sample to show actual boxes.
+Click **Start controlled quality demo** to show a measured regression and real
+automatic recovery. The candidate confidence fault is explicit; a camera miss
+alone never establishes quality failure. Camera capture, actual 640x480 API inference and stopping are verified.
+Test your actual hard-hat scene beforehand; image upload is the repeatable fallback.
+
+Two real quality runs passed (42.09% → 0% → 42.09% serving AP50–95), and all 95
+regression tests passed. The outage example below remains available as a separate
+scenario. Dependency advisories and person-quality limits remain documented in
+the final audit. This is a local demonstration, not production acceptance.
 
 ## What works
 
@@ -18,7 +33,7 @@ production model, or promote main-registry stable aliases.
 | Automatic rollback | Real container outage caused the continuous watcher to restore the predecessor automatically in an isolated demo registry. |
 | Recovery validation | Three readiness checks, twenty real-image predictions and fresh Prometheus identity passed. |
 | GitHub Actions | Existing manual validation/build/deployment workflow; latest change tested locally, no new Actions run claimed. |
-| Local regression tests | All 89 tests passed. |
+| Local regression tests | All 95 tests passed in the final audit. |
 
 ## Open the project
 

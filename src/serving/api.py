@@ -27,7 +27,8 @@ def decode_image(body, max_pixels):
     try:
         with warnings.catch_warnings():
             warnings.simplefilter("error", Image.DecompressionBombWarning)
-            with Image.open(BytesIO(body)) as source:
+            # Do not invoke unrelated file-format plugins on untrusted upload bytes.
+            with Image.open(BytesIO(body), formats=['PNG', 'JPEG']) as source:
                 if source.format not in {"PNG", "JPEG"} or getattr(source, "n_frames", 1) != 1:
                     raise HTTPException(415, "Use a single PNG or JPEG image")
                 if source.width * source.height > max_pixels:

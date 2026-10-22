@@ -27,11 +27,22 @@ from src.serving.deploy import deploy, deployment_lock, stage_model, write_recei
 from src.tracking.mlflow_utils import local_store
 
 
-def demonstrate(output, docker):
+def demonstrate(output, docker, mode='outage', predecessor_version='1', candidate_version='3'):
+    if mode not in ('outage', 'quality'):
+        raise ValueError('Unknown demonstration mode')
     output = output.resolve()
     if not output.is_relative_to(ROOT / 'reports') or output == ROOT / 'reports':
         raise ValueError('Use a new demonstration directory under reports/')
     output.mkdir(parents=True, exist_ok=False)
+    # Preserve the exact executed source even when a demonstration uses uncommitted work.
+    source_hashes = {}
+    for path in [Path(__file__), *ROOT.glob('src/**/*.py'), ROOT / 'configs/config.yaml']:
+        relative = path.relative_to(ROOT)
+        destination = output / 'source' / relative
+        destination.parent.mkdir(parents=True, exist_ok=True)
+        shutil.copy2(path, destination)
+        source_hashes[relative.as_posix()] = hashlib.sha256(path.read_bytes()).hexdigest()
+    write_receipt(output / 'source/sha256.json', source_hashes)
     store = output / 'isolated-project'
     (store / 'configs').mkdir(parents=True)
     (store / 'data').mkdir()
@@ -57,42 +68,60 @@ def demonstrate(output, docker):
     name = demo_registry['model_name']
     client.create_registered_model(name, description='Isolated operational recovery fixture; NOT quality-approved.')
     versions = []
-    for original_version in ('1', '3'):
+    for original_version in (predecessor_version, candidate_version):
         original = original_client.get_model_version(registry['model_name'], original_version)
         versions.append(client.create_model_version(name, original.source, run_id=original.run_id,
             tags={**original.tags, 'approval_status': 'demo_fixture_only', 'source_model_version': original_version}))
     client.set_registered_model_alias(name, 'stable', versions[0].version)
     client.set_registered_model_alias(name, 'previous_stable', versions[0].version)
-    report = {'started_at': datetime.now(timezone.utc).isoformat(), 'scope': 'isolated operational integration demonstration',
+    report = {'started_at': datetime.now(timezone.utc).isoformat(), 'scope': 'isolated ' + mode + ' integration demonstration',
               'quality_approval': False, 'main_registry_aliases_before': original_aliases,
-              'source_versions': ['1', '3'], 'demo_model_name': name, 'status': 'running',
+              'source_versions': [predecessor_version, candidate_version], 'demo_model_name': name, 'status': 'running', 'mode': mode,
               'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}
     stop, failures = Event(), []
     thread = None
     changed_service = False
+    def progress(stage, message):
+        write_receipt(output / 'progress.json', {'stage': stage, 'message': message, 'mode': mode})
+        print(message, flush=True)
     with deployment_lock(ROOT):
         try:
-            print('Deploying the verified predecessor in the isolated demo registry.', flush=True)
+            progress('predecessor', 'Deploying the verified predecessor in the isolated demo registry.')
             staged, manifest = stage_model(ROOT, store, versions[0].version)
             changed_service = True
             with deployment_lock(store):
                 predecessor = deploy(store, staged, manifest, original_receipt['image_id'], docker)
             report['predecessor'] = predecessor
-            print('Deploying candidate and capturing the real predecessor rollback target.', flush=True)
-            staged, manifest = stage_model(ROOT, store, versions[1].version, experimental=True)
+            if mode == 'quality':
+                from src.monitoring.serving_audit import prepare_batch, measure, comparison
+                progress('baseline_audit', 'Measuring predecessor detections on 250 existing labeled monitoring images.')
+                batch, batch_sha = prepare_batch(ROOT, output)
+                baseline = measure(batch, predecessor['model'], output / 'baseline-predictions.json')
+                # Deliberate configuration fault, recorded in the deployed manifest.
+                # No fake predictions, edited weights, altered labels or main-policy changes.
+                config['serving']['confidence'] = 1.0
+                (store / 'configs/config.yaml').write_text(yaml.safe_dump(config, sort_keys=False))
+                report['controlled_fault'] = {'kind': 'confidence_threshold', 'value': 1.0,
+                    'note': 'Explicit configuration-fault demonstration, not natural model degradation'}
+            progress('candidate', 'Deploying candidate and capturing the real predecessor rollback target.')
+            staged, manifest = stage_model(store if mode == 'quality' else ROOT, store, versions[1].version, experimental=True)
             with deployment_lock(store):
                 candidate = deploy(store, staged, manifest, original_receipt['image_id'], docker)
             assert candidate['rollback_target']['model']['checkpoint_sha256'] == predecessor['model']['checkpoint_sha256']
             report['candidate'] = candidate
+            if mode == 'quality':
+                report['fault_injected_at'] = candidate['started_at_utc']
             # Keep the real production grace period; do not fabricate timestamps or health evidence.
             state = json.loads(subprocess.check_output([docker, 'inspect', candidate['container_id']], text=True))[0]
             started = datetime.fromisoformat(state['State']['StartedAt'].replace('Z', '+00:00')).timestamp()
-            print('Waiting for the configured startup grace period before the fault test.', flush=True)
+            progress('candidate_live', 'Candidate is live. Quality mode intentionally uses confidence 1.0. Waiting for startup grace.' if mode == 'quality'
+                     else 'Waiting for the configured startup grace period before the fault test.')
             while time.time() < started + config['health']['startup_grace_seconds'] + 1:
                 time.sleep(1)
             def controller():
                 try:
-                    watch(store, docker, output / 'watch.json', 10, stop=stop)
+                    watch(store, docker, output / 'watch.json', 10, stop=stop,
+                          audit=output / 'audit.json' if mode == 'quality' else None)
                 except Exception as error:
                     failures.append(repr(error))
             thread = Thread(target=controller, name='rollback-demo-watch')
@@ -106,9 +135,23 @@ def demonstrate(output, docker):
             assert initial['status'] == 'observe', initial
             assert initial['health']['signals']['readiness']['status'] == 'healthy'
             report['healthy_watch_check'] = initial
-            print('Watcher is active. Stopping the candidate container to inject a real outage.', flush=True)
-            subprocess.run([docker, 'stop', '--time', '5', candidate['container_id']], check=True, capture_output=True)
-            report['fault_injected_at'] = datetime.now(timezone.utc).isoformat()
+            if mode == 'quality':
+                progress('awaiting_quality_check', 'Live detections are visible. Camera misses request an audit; a scheduled audit also starts within 30 seconds.')
+                deadline = time.monotonic() + 30
+                while not (output / 'request-audit').exists() and time.monotonic() < deadline:
+                    time.sleep(1)
+                progress('candidate_audit', 'Checking candidate detections against the SAME 250 labeled images. Empty camera frames alone do not trigger rollback.')
+                candidate_scores = measure(batch, candidate['model'], output / 'candidate-predictions.json')
+                audit = comparison(store, batch_sha, baseline, candidate_scores)
+                write_receipt(output / 'audit.json', audit)
+                report['quality_audit'] = audit
+                if audit['baseline_map50_95'] - audit['candidate_map50_95'] < config['health']['map50_95_absolute_drop_threshold']:
+                    raise RuntimeError('Measured regression is insufficient; refusing to claim a quality rollback')
+                progress('quality_breach', 'Measured AP drop exceeds 0.05. The watcher will independently validate evidence and restore the predecessor.')
+            else:
+                progress('outage', 'Watcher is active. Stopping the candidate container to inject a real outage.')
+                subprocess.run([docker, 'stop', '--time', '5', candidate['container_id']], check=True, capture_output=True)
+                report['fault_injected_at'] = datetime.now(timezone.utc).isoformat()
             deadline = time.monotonic() + 240
             while time.monotonic() < deadline:
                 result = json.loads((output / 'watch.json').read_text())
@@ -126,8 +169,20 @@ def demonstrate(output, docker):
             assert len(recovery['readiness']) == 3 and len(recovery['predictions']) == 20
             assert recovery['monitoring_resumed'] is True
             assert report['rollback']['restored_deployment']['model']['checkpoint_sha256'] == predecessor['model']['checkpoint_sha256']
+            if mode == 'quality':
+                assert report['rollback']['decision']['reasons'] == ['quality']
+                progress('recovery_audit', 'Predecessor restored. Rechecking labeled detection quality after rollback.')
+                recovered = measure(batch, report['rollback']['restored_deployment']['model'], output / 'recovered-predictions.json')
+                if recovered['map50_95'] < baseline['map50_95'] - .001:
+                    raise RuntimeError('Restored detection quality did not recover to the measured predecessor baseline')
+                report['recovered_map50_95'] = recovered['map50_95']
             report['followup_check'] = run(store, docker)
             assert report['followup_check']['status'] == 'unavailable'  # No rollback ping-pong.
+            report['durable_attempts'] = len(list((store / 'artifacts/serving/rollback').glob('attempt-*.json')))
+            assert report['durable_attempts'] == 1
+            after_retry = json.loads((store / 'artifacts/serving/deployment.json').read_text())
+            assert after_retry['container_id'] == report['rollback']['restored_deployment']['container_id']
+            report['retry_kept_recovered_container'] = True
             report['status'] = 'passed'
             print('Automatic rollback passed: 3 readiness checks, 20 predictions, fresh Prometheus identity.', flush=True)
         except Exception as error:
@@ -138,7 +193,7 @@ def demonstrate(output, docker):
             if thread is not None:
                 thread.join()
             if changed_service:
-                print('Restoring the original experimental API and main deployment receipt.', flush=True)
+                progress('restoring_original', 'Restoring the original experimental API and main deployment receipt.')
                 current = subprocess.run([docker, 'inspect', 'visual-analytics-api'], capture_output=True, text=True)
                 if current.returncode == 0:
                     current = json.loads(current.stdout)[0]
@@ -154,13 +209,17 @@ def demonstrate(output, docker):
             assert report['main_registry_aliases_after'] == original_aliases
             report['completed_at'] = datetime.now(timezone.utc).isoformat()
             write_receipt(output / 'result.json', report)
+            progress(report['status'], 'Demonstration ' + report['status'] + '. Original API restored; main model approvals unchanged.')
     return report
 
 
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
+    parser.add_argument('--mode', choices=('outage', 'quality'), default='outage')
+    parser.add_argument('--predecessor-version', default='1', help='Existing source version designated as demo predecessor')
+    parser.add_argument('--candidate-version', default='3', help='Existing source candidate version; never a production promotion')
     parser.add_argument('--docker', default=str(Path(os.environ['LOCALAPPDATA']) / 'Programs/DockerDesktop/resources/bin/docker.exe'))
     args = parser.parse_args()
-    result = demonstrate(args.output, args.docker)
+    result = demonstrate(args.output, args.docker, args.mode, args.predecessor_version, args.candidate_version)
     print(json.dumps({'status': result['status'], 'quality_approval': False, 'output': str(args.output)}))

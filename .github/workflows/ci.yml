@@ -84,21 +84,7 @@ jobs:
 
       - name: Validate monitoring configuration
         run: |
-          @'
-          import os
-          from pathlib import Path
-          import subprocess
-          import yaml
-
-          docker = str(Path(os.environ["LOCALAPPDATA"]) / "Programs/DockerDesktop/resources/bin/docker.exe")
-          subprocess.run([docker, "compose", "-f", "compose.monitoring.yaml", "config", "--quiet"], check=True)
-          image = yaml.safe_load(Path("compose.monitoring.yaml").read_text())["services"]["prometheus"]["image"]
-          config = Path(os.environ["RUNNER_TEMP"]) / "prometheus.yaml"
-          config.write_bytes(Path("configs/monitoring/prometheus.yaml").read_bytes())
-          subprocess.run([docker, "run", "--rm", "--network", "none", "--entrypoint", "promtool",
-                          "--mount", f"type=bind,source={config},target=/config.yaml,readonly",
-                          image, "check", "config", "/config.yaml"], check=True)
-          '@ | & "$env:RUNNER_TEMP\venv\Scripts\python.exe" -
+          & "$env:RUNNER_TEMP\venv\Scripts\python.exe" scripts/check_monitoring.py
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
       - name: Build CPU serving image

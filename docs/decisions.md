@@ -1377,3 +1377,28 @@ training or automatic acceptance of unfinished labels is performed. Main registr
 stable aliases remain unassigned; no quality approval is implied by this scope
 change. docs/demo-handoff.md records launch/restart commands, the repeatable live
 rollback demonstration, evidence locations and limitations for assessment.
+
+
+## Final audit and live quality demonstration (2026-10-22)
+
+The user requested a live detection interface and an evidence-based emergency
+completion audit. The storage conflict was explicitly resolved in favor of the
+existing Google Drive remote; B2 remains legacy and no remote transfer was made.
+The new console uses existing FastAPI and plain HTML, bound to loopback 8767.
+No new frontend framework or cloud technology was added.
+
+The controlled quality demo deliberately records confidence 1.0 in an isolated
+candidate, measures actual HTTP predictions on the fixed 250-image monitoring
+batch, and lets the existing watcher restore the captured predecessor through
+normal deployment. It preserves thresholds, identity checks and startup grace.
+Two actual runs passed, including browser initiation on the hardened image.
+Main stable aliases remain empty; neither demo fixtures nor registration grant
+quality approval. Version 1 had the best same-cohort AP50-95 and stays experimental.
+Short batch/FP16 experiments did not establish a better model or speed win.
+
+The canonical audit is docs/final-audit.md; the presentation guide is
+docs/vscode-demo.md. Original inputs, annotation records and historical evidence
+remain intact. No uncertain file was deleted. Remaining production blockers
+include incomplete person labels, unknown upstream dataset version and vulnerable
+locked torch/Pillow dependencies; restricting image decoders is containment,
+not a claim those packages were patched.

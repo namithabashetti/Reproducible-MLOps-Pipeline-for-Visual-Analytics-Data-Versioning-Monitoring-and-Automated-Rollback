@@ -342,7 +342,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome=\"server_error\"}[2m])) / sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m]))",
+          "expr": "sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome=\"server_error\"}[2m])) / (sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])) > 0)",
           "legendFormat": "v{{model_version}} / {{deployment_id}}",
           "instant": false,
           "range": true,
@@ -389,7 +389,7 @@
       "targets": [
         {
           "refId": "A",
-          "expr": "histogram_quantile(0.95, sum by(le,model_version,deployment_id) (rate(va_prediction_duration_seconds_bucket{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])))",
+          "expr": "histogram_quantile(0.95, sum by(le,model_version,deployment_id) (rate(va_prediction_duration_seconds_bucket{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m]))) and on(model_version,deployment_id) (sum by(model_version,deployment_id) (rate(va_prediction_duration_seconds_count{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])) > 0)",
           "legendFormat": "v{{model_version}} / {{deployment_id}}",
           "instant": false,
           "range": true,

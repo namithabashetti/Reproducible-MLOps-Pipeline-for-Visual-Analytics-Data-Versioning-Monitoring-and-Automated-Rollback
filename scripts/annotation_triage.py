@@ -305,15 +305,24 @@ def make_server(project, folder, port=8766):
             self.send(404, b'{}')
 
         def do_POST(self):
+            # Consume only a bounded body before replying. Closing a Windows socket
+            # with unread request bytes can reset it before the client sees a 403.
+            try:
+                length = int(self.headers.get("Content-Length", "0"))
+                if not 0 < length <= 100000 or self.headers.get("Transfer-Encoding"):
+                    return self.send(413, b'{}')
+                self.connection.settimeout(3)
+                body = self.rfile.read(length)
+                if len(body) != length:
+                    return self.send(400, b'{}')
+            except (ValueError, OSError):
+                return self.send(400, b'{}')
             if not self.local_request() or self.headers.get("X-Review-Token") != token:
                 return self.send(403, b'{}')
             if self.path != "/api/decision":
                 return self.send(404, b'{}')
             try:
-                length = int(self.headers.get("Content-Length", "0"))
-                if not 0 < length <= 100000:
-                    raise ValueError("Invalid request size")
-                request = json.loads(self.rfile.read(length))
+                request = json.loads(body)
                 after = save_decision(project, folder, request, identity)
                 response = {**after, "revision": fingerprint(after),
                             "triage": rank_record(after, suggestions["records"][after["image_id"]]),

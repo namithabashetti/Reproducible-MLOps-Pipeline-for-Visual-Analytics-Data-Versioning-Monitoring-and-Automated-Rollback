@@ -4,7 +4,11 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status (2026-10-21): The continuous rollback watcher passed a real Docker outage/recovery demonstration in an isolated registry: automatic predecessor restore, 3 readiness checks, 20 successful predictions, and fresh monitoring. All 89 local tests passed. The original experimental API, Prometheus and Grafana are running. Full three-class quality remains open: person detection is weak and validation correction has 43 reviewed, 51 pending and 6 unresolved images. Main-registry stable aliases remain unassigned; demo aliases do not approve model quality.**
+**Current status (2026-10-22): The local live console supports actual image uploads, annotated predictions, and a controlled quality-failure demonstration. Two real automatic rollback runs passed: serving AP50-95 42.09% → 0% → 42.09%, with predecessor redeployment, 3 readiness checks, 20 predictions and fresh monitoring. All 95 regression tests pass. Version 1 remains experimental; person quality, upstream dataset provenance and dependency-security upgrades remain open.**
+
+**Start here:** [Live presentation and Windows commands](docs/vscode-demo.md) · [Final audit, requirement matrix and evidence](docs/final-audit.md). Open the console at <http://127.0.0.1:8767/> after starting its server. Google Drive remains the approved DVC remote.
+
+The sections below retain the earlier phase implementation notes and historical metrics. For current readiness, standardized evaluation and verified scope, use the final audit above. No historical result grants main-registry stable approval.
 
 **Accepted handoff:** The user approved the working college demonstration with
 model-quality limitations documented on 2026-10-21. Start with the short
