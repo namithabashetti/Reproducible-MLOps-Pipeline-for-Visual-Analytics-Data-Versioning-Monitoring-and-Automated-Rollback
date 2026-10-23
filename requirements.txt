@@ -1,14 +1,14 @@
-# Windows/Python 3.11 environment through Phase 8.
---extra-index-url https://download.pytorch.org/whl/cu121
+# Direct dependencies for Windows / Python 3.11.9; full resolved pins are in requirements-lock.txt.
+--extra-index-url https://download.pytorch.org/whl/cu126
 PyYAML==6.0.3
-Pillow==10.2.0
+Pillow==13.0.0
 dvc[s3,gdrive]==3.67.1
 dvc-s3==3.3.0
 dvc-gdrive==3.0.1
 numpy==1.26.4
 opencv-python==4.11.0.86
-torch==2.2.2+cu121
-torchvision==0.17.2+cu121
+torch==2.13.0+cu126
+torchvision==0.28.0+cu126
 ultralytics==8.3.230
 mlflow==3.16.1
 fastapi==0.143.0
