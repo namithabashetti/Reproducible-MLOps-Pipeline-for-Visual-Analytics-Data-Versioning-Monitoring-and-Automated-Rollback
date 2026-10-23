@@ -1,4 +1,4 @@
-# College demonstration handoff — updated 22 October 2026
+# College demonstration handoff — updated 23 October 2026
 
 The user accepted a working college MLOps demonstration with model-quality
 limitations documented. This replaces full three-class model quality as the
@@ -15,9 +15,9 @@ automatic recovery. The candidate confidence fault is explicit; a camera miss
 alone never establishes quality failure. Camera capture, actual 640x480 API inference and stopping are verified.
 Test your actual hard-hat scene beforehand; image upload is the repeatable fallback.
 
-Two real quality runs passed (42.09% → 0% → 42.09% serving AP50–95), and all 95
+Three real quality runs passed (42.09% → 0% → 42.09% serving AP50–95), and all 95
 regression tests passed. The outage example below remains available as a separate
-scenario. Dependency advisories and person-quality limits remain documented in
+scenario. The updated Linux serving image passed a 250-image comparison with identical predictions and a new real rollback run. Host training dependency advisories and person-quality limits remain documented in
 the final audit. This is a local demonstration, not production acceptance.
 
 ## What works

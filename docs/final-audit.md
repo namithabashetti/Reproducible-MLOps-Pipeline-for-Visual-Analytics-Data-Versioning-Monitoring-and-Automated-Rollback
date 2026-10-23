@@ -1,14 +1,15 @@
-# Final implementation audit — 22 October 2026
+# Final implementation audit — updated 23 October 2026
 
 ## Readiness and scope
 
 **GO for the local college demonstration; NO-GO for production or full three-class model acceptance.**
-Final checks: 95/95 local tests, seven live dashboard panels and two real quality rollback runs passed.
+Final checks: 95/95 local tests, seven live dashboard panels and three real quality rollback runs passed.
 [GitHub validation run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600) also passed all 95 tests, monitoring checks and the Docker build for implementation commit `944b56f8212ca784245cd7fe1c647ef4d2894ae6`. Deployment was disabled.
 The presentation now includes actual image uploads and annotated predictions, a controlled
 quality regression, real automatic predecessor redeployment, recovery predictions and monitoring.
-Two quality rollback runs passed. The second was started from the browser on the hardened
-serving image; the original experimental API and main registry were restored afterward.
+The second quality rollback run was started from the browser on the hardened image.
+The third verified the dependency-updated serving image. The original experimental API
+and main registry were restored after each demonstration.
 
 The user approved Google Drive as the DVC remote, superseding GCS in the PRD and B2 in the
 emergency checklist. The existing raw dataset remains unchanged. No new dataset, framework,
@@ -38,6 +39,7 @@ are versioned. A source checkout alone does not contain the dataset, registry or
 | T | `E/training-pilot/results.json`, `E/pilot-mlflow.json`: two real diagnostic GPU training runs |
 | R1 | `reports/live-demo-0c5a105ec84e/result.json`: first real quality recovery |
 | R2 | `reports/live-demo-f857ca1442d4/result.json`: repeated real quality recovery on the hardened image |
+| R3 | `reports/security-upgrade-20261022/rollback/result.json`: real quality recovery on the dependency-updated image |
 | Q | `E/final-tests-v2.log`: final regression run; `E/final-tests.log` preserves the earlier failure |
 | O | `E/live-integration-v2/validation.json`: final live integration; original dashboard failure retained in `E/live-integration/` |
 | S | `E/dependency-advisories.json`, `E/source-security-inventory.json`, `E/security-runtime-final.json`: bounded security inspection |
@@ -263,7 +265,7 @@ The monitoring regression uses the deployed Prometheus image and tests idle/acti
 The current workflow invokes it. [GitHub run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600)
 completed successfully on the dedicated Windows runner: **95 tests in 174.353 seconds**,
 monitoring regression and Docker build all passed. It tested implementation commit
-`944b56f8212ca784245cd7fe1c647ef4d2894ae6` with deployment set to `none`. This report update is documentation-only.
+`944b56f8212ca784245cd7fe1c647ef4d2894ae6` with deployment set to `none`. That run predates the serving dependency migration below; it does not certify the new pins.
 The runner session was stopped after completion; the existing API was not redeployed.
 `E/github-run.json` and `E/github-job-119966908709.log` retain the receipt and logs.
 Local compilation, dependency consistency, actionlint, JavaScript syntax, Git whitespace,
@@ -277,14 +279,40 @@ requires its per-process token. Routes do not accept arbitrary file paths, URLs 
 Secrets remain in ignored local mechanisms; targeted tracked-file pattern checks found no
 matches. This is not an exhaustive Git-history/transitive-dependency security certification.
 
-**Unresolved dependency risk:** installed torch 2.2.2 and Pillow 10.2.0 have advisory records.
+**Serving dependency migration:** the reproducible Linux image now pins CPU torch 2.13.0,
+torchvision 0.28.0, Pillow 13.0.0, certifi 2026.10.19, opentelemetry-api 1.45.1,
+pip 26.2.2, setuptools 84.2.1 and wheel 0.48.0. The torch/torchvision pair follows
+[the official CPU installation matrix](https://pytorch.org/get-started/previous-versions/).
+All 50 installed Python distributions were checked against their version-specific PyPI JSON
+metadata on 22 October 2026: zero advisory records and zero unavailable queries. This is
+a point-in-time Python-package check, not an OS-image scan or a security certification.
+Both the initial isolated candidate and the clean build produced identical detections on
+the same 250 frozen monitoring images: AP50-95 remained 0.42086015157832724, with zero
+changes in counts, classes, coordinates or confidence. Corrupt, unsupported and oversized
+uploads returned 422, 415 and 413. The clean image passed `pip check`; five serving tests
+and the real promtool monitoring regression passed in the existing host environment.
+Evidence: `reports/security-upgrade-20261022/` (`final/comparison.json`,
+`final/candidate-advisories.json`, `final/candidate-packages.json`, `clean-build.log`).
+Image: `visual-analytics-api:security-20261022`,
+`sha256:01b95620dc44c3f376e3214eb8502fb60a89025a0d8760c9e3df07c084d5a5b7`.
+The previous image is retained for recovery.
+The normal deployment path installed this image, and a third real quality rollback run
+passed: AP50-95 0.42086015157832724 → 0 → 0.42086015157832724, three readiness
+checks, 20 recovery predictions and fresh Prometheus identity. Exactly one durable rollback
+attempt was recorded; a retry kept the recovered container. Both existing v1/v3 checkpoints
+loaded successfully under the upgraded runtime. The final restored main v1 API uses the new
+image, remains experimental, and has no main stable aliases. This is controlled-fault evidence,
+not person-quality acceptance. See R3 and `reports/security-upgrade-20261022/migration.json`.
+
+**Residual host dependency risk:** the separate Windows training environment still uses
+torch 2.2.2 and Pillow 10.2.0, which have advisory records.
 [PyTorch's critical advisory](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6)
 includes this torch version and warns that even `weights_only=True` can execute code when
 loading malicious checkpoints. Hash verification provides provenance, not a safe deserializer.
 Only the existing trusted local checkpoints are used; arbitrary uploaded model loading is absent.
-Pillow's decoder restriction reduces exposure but does not patch the dependency. A tested
-torch/torchvision/CUDA and Pillow upgrade is still required before production use. The audit
-did not blindly replace the locked training environment or invalidate its DVC dependencies.
+The serving upgrade does not make arbitrary pickle checkpoints safe to load. A tested
+Windows torch/torchvision/CUDA and Pillow migration is still required before production use.
+The locked training environment and its DVC dependency identity were preserved.
 PyPI advisory record counts include duplicate aliases and are not distinct vulnerability counts.
 
 ## Literature comparison
@@ -382,8 +410,8 @@ in a particular live scene.
 | Not improved / inconclusive | Full-train/assisted models and batch/FP16 experiments | No superior three-class model or speed win claimed; keep measured baseline |
 | Blocked by missing evidence | Original Kaggle URL/version; complete person labels; quality-approved stable predecessor | Obtain provenance and audited labels, retrain/evaluate, then approve a main stable model |
 | External / unverified | Current Google Drive availability and full paper protocols | Prior storage receipt retained; no new remote data transfer. Current GitHub implementation validation passed |
-| Not completed in this audit | Secure dependency migration, training-resume CLI, early-stopping benefit, worker/cache/AMP sweep, GPU utilization trace, real crash/power-loss injection | Not needed to demonstrate existing local flow; required as applicable before broader deployment |
-| Production blocker | Vulnerable locked dependencies and unaccepted model quality | Upgrade and regression-test the environment; establish quality gates before network/public use |
+| Not completed in this audit | Host CUDA dependency migration, training-resume CLI, early-stopping benefit, worker/cache/AMP sweep, GPU utilization trace, real crash/power-loss injection | Serving Python dependency migration is verified separately above; remaining work applies before broader deployment |
+| Production blocker | Vulnerable host training dependencies and unaccepted model quality | Upgrade and regression-test the host environment; establish quality gates before network/public use |
 
 No promise of fully autonomous natural camera-error detection is made. Natural quality failure
 needs trustworthy labeled evidence and an approved predecessor. The college demonstration

@@ -1415,3 +1415,19 @@ This subsequent documentation update records the result without changing runtime
 Camera capture at 640x480, real API responses and stopping were also verified;
 only metadata was saved, not camera frames. Live-scene hard-hat accuracy remains
 a model-quality question, distinct from camera transport.
+
+### Serving dependency migration — verified 23 October 2026
+
+Upgrade only the Linux serving closure: CPU torch 2.13.0/torchvision 0.28.0,
+Pillow 13.0.0, certifi 2026.10.19, opentelemetry-api 1.45.1, pip 26.2.2,
+setuptools 84.2.1 and wheel 0.48.0. The clean pinned image produced exactly the
+same predictions on 250 frozen monitoring images and passed a real controlled
+quality rollback (42.09% → 0% → 42.09%). No checkpoint, label, threshold,
+training configuration, Google Drive remote or main quality approval changed.
+The previous image is retained. Version-specific PyPI metadata reported no
+advisories for the 50 installed Python packages; OS security was not certified.
+The separate Windows CUDA training environment still requires a tested migration.
+The earlier GitHub run covers commit 944b56f, not these later dependency pins;
+the migration has local clean-build, real inference and rollback evidence in
+`reports/security-upgrade-20261022/`. Updated startup commands use the validated
+`visual-analytics-api:security-20261022` image.

@@ -73,11 +73,11 @@ running exact-count monitoring validation. Keep the console terminal open.
 If the API container is missing, recreate it from the verified local image:
 
 ```powershell
-.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental --image visual-analytics-api:audit-20261022
+.\.venv\Scripts\python.exe -m src.serving.deploy --version 1 --experimental --image visual-analytics-api:security-20261022
 ```
 
 If that image is absent, build it first with
-`& $dockerExe build -t visual-analytics-api:audit-20261022 .`.
+`& $dockerExe build -t visual-analytics-api:security-20261022 .`.
 
 ## 3. Make a real prediction
 
