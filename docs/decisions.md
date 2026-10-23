@@ -1431,3 +1431,38 @@ The earlier GitHub run covers commit 944b56f, not these later dependency pins;
 the migration has local clean-build, real inference and rollback evidence in
 `reports/security-upgrade-20261022/`. Updated startup commands use the validated
 `visual-analytics-api:security-20261022` image.
+
+### Windows training migration — 23 October 2026
+
+Keep Python 3.11.9 and the approved Google Drive remote. Select the official
+torch 2.13.0 / torchvision 0.28.0 CUDA 12.6 pair after verifying driver 592.82,
+RTX 3050 A Laptop hardware and all three existing model artifacts. Upgrade
+Pillow to 13.0.0 and the affected compatible HTTP, certificate, Git, NLP, telemetry
+and packaging dependencies. Do not change training settings, checkpoint selection
+or quality gates. The isolated 216-package closure passed pip check, 95 regression
+tests, actual CUDA/NMS and CPU/GPU inference for all three model versions before
+promotion to `.venv`. Preserve the original environment and manifests locally.
+
+PyDrive2 1.21.3 caps cryptography below 44 and pyOpenSSL at 24.2.1. This blocks
+patched cryptography, pyOpenSSL and AsyncSSH versions under the current adapter;
+diskcache 5.6.3 has no fixed release in inspected advisory metadata. Record these
+limits instead of forcing incompatible dependencies or silently changing storage.
+See the final audit for the final smoke, data, rollback and remote-CI receipts.
+Official package pairing: https://pytorch.org/get-started/previous-versions/ .
+Driver compatibility: https://docs.nvidia.com/deploy/cuda-compatibility/minor-version-compatibility.html .
+
+Both DVC stages were rerun with the new lock: their output hashes are identical,
+and the original dataset identity is preserved. The one-epoch GPU smoke test
+completed with finite losses on 64 training / 32 validation images. It remains
+a hardware test and was not registered. The fourth controlled quality rollback
+passed with the upgraded controller: source v1 → source v3 with confidence 1.0
+→ restored source v1; 250-image serving AP50-95 returned from 0 to 0.42086015.
+One durable attempt, repeat-check idempotence, recovery probes, fresh monitoring
+and unchanged main aliases were verified. A post-restoration check passed twenty
+more predictions and all seven dashboard queries. Generated evidence is local in
+`reports/release-finalization-20261023/`; raw data, weights and reports are not
+committed. Full three-class quality and original upstream provenance remain open.
+
+[GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed all 95 tests (178.927 seconds), dependency consistency, compilation, monitoring validation and the CPU Docker build for implementation commit `32c2bf7059c23b383ef855092ffbea30ea995771`. Deployment was disabled.
+The final handoff commit records this outcome and changes only documentation.
+The temporary runner is stopped after the job; the local demo services stay up.

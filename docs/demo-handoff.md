@@ -15,9 +15,9 @@ automatic recovery. The candidate confidence fault is explicit; a camera miss
 alone never establishes quality failure. Camera capture, actual 640x480 API inference and stopping are verified.
 Test your actual hard-hat scene beforehand; image upload is the repeatable fallback.
 
-Three real quality runs passed (42.09% → 0% → 42.09% serving AP50–95), and all 95
+Four real quality runs passed (42.09% → 0% → 42.09% serving AP50–95), and all 95
 regression tests passed. The outage example below remains available as a separate
-scenario. The updated Linux serving image passed a 250-image comparison with identical predictions and a new real rollback run. Host training dependency advisories and person-quality limits remain documented in
+scenario. The updated Linux serving image passed a 250-image comparison with identical predictions and a new real rollback run. Windows training now uses torch 2.13.0+cu126 / torchvision 0.28.0+cu126 / Pillow 13.0.0; a real one-epoch GPU smoke test and all 95 isolated tests passed. Remaining storage-adapter/cache advisories and person-quality limits are documented in
 the final audit. This is a local demonstration, not production acceptance.
 
 ## What works
@@ -32,7 +32,7 @@ the final audit. This is a local demonstration, not production acceptance.
 | Drift and health decisions | Existing PSI/KS reporting and combined health rules; drift alone cannot trigger rollback. |
 | Automatic rollback | Real container outage caused the continuous watcher to restore the predecessor automatically in an isolated demo registry. |
 | Recovery validation | Three readiness checks, twenty real-image predictions and fresh Prometheus identity passed. |
-| GitHub Actions | [Run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600) passed 95 tests, monitoring checks and Docker build for commit 944b56f; deployment disabled. |
+| GitHub Actions | [GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed all 95 tests (178.927 seconds), dependency consistency, compilation, monitoring validation and the CPU Docker build for implementation commit `32c2bf7059c23b383ef855092ffbea30ea995771`. Deployment was disabled. |
 | Local regression tests | All 95 tests passed in the final audit. |
 
 ## Open the project

@@ -4,7 +4,7 @@ This college major project connects dataset versioning, object detection, model
 tracking, local serving, monitoring, and recovery. Its central rule is that drift
 is evidence for a health decision: drift alone never triggers rollback.
 
-**Current status (2026-10-23): The local live console supports actual image uploads, annotated predictions, and a controlled quality-failure demonstration. Three real automatic rollback runs passed: serving AP50-95 42.09% → 0% → 42.09%, with predecessor redeployment, 3 readiness checks, 20 predictions and fresh monitoring. The application implementation passed all 95 regression tests locally and in [GitHub Actions](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600); monitoring checks and Docker build also passed there before this dependency migration. Camera capture/inference and stopping are verified. Version 1 remains experimental; person quality, upstream dataset provenance and the Windows training dependency migration remain open. The Linux serving dependency upgrade passed an exact 250-image prediction comparison and a fresh real rollback test; see the final audit for scope and evidence.**
+**Current status (2026-10-23): The local live console supports actual image uploads, annotated predictions, camera inference and controlled automatic recovery. Version 1 remains experimental: person quality and upstream dataset provenance remain unresolved. The Linux serving dependency upgrade passed an exact 250-image comparison and real rollback. The Windows training upgrade now uses a tested CUDA 12.6 environment; all 95 isolated tests and CPU/GPU inference for the three registered checkpoints passed. [GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed the latest implementation, including 95 tests, monitoring and Docker build. Finalization evidence and the precise CI/dependency-advisory scope are recorded in the [final audit](docs/final-audit.md).**
 
 **Start here:** [Live presentation and Windows commands](docs/vscode-demo.md) · [Final audit, requirement matrix and evidence](docs/final-audit.md). Open the console at <http://127.0.0.1:8767/> after starting its server. Google Drive remains the approved DVC remote.
 
@@ -176,18 +176,23 @@ MLflow; naming them as direct serving dependencies did not change this lock.
 The Linux image uses `requirements-serving.txt`, CPU PyTorch 2.13.0/torchvision 0.28.0,
 Pillow 13.0.0 and the same Ultralytics 8.3.230. Certificate, telemetry and packaging
 dependencies are also pinned to the tested security update. Prometheus client 0.26.0
-is pinned in both environments. The Windows training lock remains separate; this
-serving migration does not update its older CUDA/PyTorch/Pillow dependencies.
+is pinned in both environments. The Windows training lock remains separate and now pins torch 2.13.0+cu126,
+torchvision 0.28.0+cu126 and Pillow 13.0.0. Both environments load the existing
+trusted checkpoints; arbitrary model uploads are not supported.
 
 Docker Desktop 4.94.0, Engine 29.8.2, Compose 5.5.1, and WSL 2 were detected during
 preparation. The Linux engine is reachable, and the user verified `hello-world`.
 The Phase 7 CPU serving image has been built and exercised on this Linux engine.
 
-The project environment uses torch `2.2.2+cu121`, torchvision `0.17.2+cu121`, and
-Ultralytics `8.3.230`. The global CPU-only installation is untouched. GPU tensor
+The project environment uses torch `2.13.0+cu126`, torchvision `0.28.0+cu126`, and
+Ultralytics `8.3.230`, with Python 3.11.9 and NVIDIA driver 592.82.
+The global CPU-only installation is untouched. GPU tensor
 operations and torchvision NMS passed on the 4 GB RTX 3050 A Laptop GPU;
 evidence is in `reports/gpu-check.json`. The one-epoch smoke training/evaluation
-also passed (`artifacts/training/smoke/metrics.json`). Settings are 416 pixels, batch 4,
+also passed after the upgrade
+(`artifacts/training/training-upgrade-smoke-20261023/metrics.json`, 64 training /
+32 validation images, finite losses). This is not a quality evaluation or model
+promotion. Settings are 416 pixels, batch 4,
 zero loader workers, and no image RAM cache. CPU fallback must be explicitly
 selected and recorded; it must not silently replace a failed GPU run.
 

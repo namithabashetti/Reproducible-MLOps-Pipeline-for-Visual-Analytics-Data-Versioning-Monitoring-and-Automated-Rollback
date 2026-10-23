@@ -19,6 +19,9 @@ Set-Location -LiteralPath 'F:\major project implementation'
 
 Expected Python: 3.11.9. If using the Python extension, select this folder's
 `.venv\Scripts\python.exe` interpreter. Do not recreate the existing environment.
+The validated training stack is torch 2.13.0+cu126 / torchvision 0.28.0+cu126 /
+Pillow 13.0.0. A new Python 3.11.9 environment can reproduce the package pins with
+`python -m pip install -r requirements-lock.txt`; this is unnecessary for the demo.
 
 ## 2. Start the existing services after reboot
 

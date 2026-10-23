@@ -2,13 +2,14 @@
 
 ## Readiness and scope
 
-**GO for the local college demonstration; NO-GO for production or full three-class model acceptance.**
-Final checks: 95/95 local tests, seven live dashboard panels and three real quality rollback runs passed.
-[GitHub validation run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600) also passed all 95 tests, monitoring checks and the Docker build for implementation commit `944b56f8212ca784245cd7fe1c647ef4d2894ae6`. Deployment was disabled.
+**Ready with documented limitations for the local college demonstration. Not accepted for production or full three-class model quality.**
+Final checks: 95/95 local tests, seven live dashboard panels and four real quality rollback runs passed.
+[GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed all 95 tests (178.927 seconds), dependency consistency, compilation, monitoring validation and the CPU Docker build for implementation commit `32c2bf7059c23b383ef855092ffbea30ea995771`. Deployment was disabled.
 The presentation now includes actual image uploads and annotated predictions, a controlled
 quality regression, real automatic predecessor redeployment, recovery predictions and monitoring.
 The second quality rollback run was started from the browser on the hardened image.
-The third verified the dependency-updated serving image. The original experimental API
+The third verified the dependency-updated serving image; the fourth verified the upgraded
+Windows controller. The original experimental API
 and main registry were restored after each demonstration.
 
 The user approved Google Drive as the DVC remote, superseding GCS in the PRD and B2 in the
@@ -25,6 +26,97 @@ of their recorded runs, not proof that a service is currently running.
 
 Start with [the exact Windows presentation guide](vscode-demo.md).
 
+## Release finalization — 23 October 2026
+
+The current evidence directory is `reports/release-finalization-20261023/`.
+`baseline.json`, `preservation.json` and the saved original environment/manifests
+provide the recovery checkpoint. `environment-probe.json` records all three saved
+models loading and predicting under CPU and CUDA with class IDs helmet=0,
+head=1, person=2. `candidate-tests.log` records 95/95 tests; the active `.venv`
+exactly matches that tested environment's freeze and passes `pip check`.
+`camera.json` records actual 640x480 camera inference and stopping; frames were
+not retained. `upload-prediction.json` and `upload-proof.png` record actual helmet
+and head detections, with person misses visible. `decision-scenarios.json` records
+explicitly synthetic policy fixtures, including drift-only observe/no rollback.
+The earlier live integration in this directory used the pre-migration host and
+unchanged Linux image: all seven Grafana panel queries and actual Evidently input
+checks passed; missing main quality approval correctly remained an acceptance gap.
+
+Original dataset URL and exact upstream version could not be verified from the available project evidence. The project uses the existing local dataset; its provenance remains an acknowledged limitation.
+
+The final active-environment checks also passed: `dvc repro dvc.yaml` regenerated
+both stages, `data-reproduction.json` confirms byte-identical split/preprocessing
+outputs and a clean DVC state, and the one-epoch GPU smoke run completed with
+finite losses on 64 training / 32 validation images. Its immutable inputs, source,
+lineage, checkpoints and metrics are under
+`artifacts/training/training-upgrade-smoke-20261023/`. It was not registered or
+promoted. `dvc.lock` changed only the dependency lock identity, not output hashes.
+The new dependency/DVC commit is `32c2bf7059c23b383ef855092ffbea30ea995771`.
+
+[GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed all 95 tests (178.927 seconds), dependency consistency, compilation, monitoring validation and the CPU Docker build for implementation commit `32c2bf7059c23b383ef855092ffbea30ea995771`. Deployment was disabled.
+`github-run.json` and `github-job-*.log` preserve the actual GitHub result from the
+dedicated self-hosted Windows runner. These results cover the new Windows and
+Linux dependency pins. The subsequent handoff commit changes documentation only;
+it is not separately claimed as a tested implementation commit.
+
+The exact CI-built image also passed a separate loopback-only readiness and real
+three-box inference smoke test using the existing staged v1 checkpoint. The
+isolated smoke container was removed and the main API was unchanged. Evidence:
+`ci-image-smoke.json`; image ID
+`sha256:09a377fe1946af0aec517b5b09730a8f04dc2579f6fd9b0ff28e1463bbc3437a`.
+The build emitted a non-fatal Windows long-path warning when capturing embedded
+Git metadata. The GitHub run SHA, SHA-named image tag and recorded image ID retain
+external build traceability; embedded Git metadata is not claimed. The temporary
+runner was stopped after the successful job (`runner-cleanup.json`).
+
+The fourth real controlled rollback (`rollback/result.json`) passed with the upgraded
+Windows controller and unchanged Linux image. Demo predecessor version 1 uses
+source model v1; demo candidate version 2 uses source model v3. Confidence 1.0 is
+the explicit candidate fault. The same 250 labeled images measured serving
+AP50-95 0.42086015157832724 → 0 → 0.42086015157832724, exceeding the unchanged
+0.05 absolute-drop threshold. The controller selected the captured stable demo
+predecessor and redeployed it through `src.serving.deploy`; recovery verified three
+readiness checks, twenty predictions and fresh Prometheus identity. The recovered
+checkpoint SHA-256 is `5f725cb9f769a68ddb8f9518a979c7999b20e152d9e406e7df34f923df43fe4f`.
+There was exactly one durable attempt; retry retained the recovered container.
+The original experimental API was restored and main aliases remained `{}`. These
+are real deployment checks with a deliberately configured fault and fixture-only
+stable aliases, not natural model degradation or production quality approval.
+
+After restoring the main API, `post-recovery.json` records twenty additional
+predictions from the original checkpoint, successful console/MLflow/Prometheus/
+Grafana responses, and all seven live Grafana panel queries passing.
+`upgraded-current-observations.json` and `upgraded-evidently/` record a fresh
+250-image replay and successful Evidently export using the upgraded Windows
+environment; evidence was available and no drift was detected. This used actual
+HTTP predictions, not synthetic feature arrays.
+`final-secret-scan.json` checked 63 tracked text files for three bounded credential
+patterns and found none; this is not a full-history secret certification.
+`final-console.png` shows the restored detector; its rollback panel retains the
+prior browser-run receipt, while the fresh CLI run is separately recorded in R4.
+
+Actual local commands (all exit 0):
+
+```powershell
+.\.venv\Scripts\python.exe -m pip check
+.\.venv\Scripts\python.exe -m dvc repro dvc.yaml
+.\.venv\Scripts\python.exe reports/release-finalization-20261023/verify_data.py
+.\.venv\Scripts\python.exe -m src.training.train --smoke --run-name training-upgrade-smoke-20261023
+.\.venv\Scripts\python.exe -m compileall -q src scripts tests
+.\.venv\Scripts\python.exe scripts/check_monitoring.py
+.\reports\release-finalization-20261023\venv\Scripts\python.exe -m unittest discover -s tests -v
+.\.venv\Scripts\python.exe scripts/demo_rollback.py --mode quality --output reports/release-finalization-20261023/rollback
+```
+
+The saved run/output names above identify completed checks. Use new output names
+when repeating training or rollback; existing evidence is deliberately protected
+from overwrite. The isolated suite passed 95 tests in 55.603 seconds.
+
+No new remote transfer was performed; the previous Google Drive restore receipt
+is historical evidence, not a current connectivity test. Dependency advisory
+constraints are detailed below. The smoke training check is a hardware/pipeline
+test, not a new accuracy claim or model promotion.
+
 ## Evidence index
 
 All paths below are relative to the repository. `E` means `reports/final-audit-20261022/`.
@@ -40,6 +132,7 @@ are versioned. A source checkout alone does not contain the dataset, registry or
 | R1 | `reports/live-demo-0c5a105ec84e/result.json`: first real quality recovery |
 | R2 | `reports/live-demo-f857ca1442d4/result.json`: repeated real quality recovery on the hardened image |
 | R3 | `reports/security-upgrade-20261022/rollback/result.json`: real quality recovery on the dependency-updated image |
+| R4 | `reports/release-finalization-20261023/rollback/result.json`: real quality recovery with the upgraded Windows controller |
 | Q | `E/final-tests-v2.log`: final regression run; `E/final-tests.log` preserves the earlier failure |
 | O | `E/live-integration-v2/validation.json`: final live integration; original dashboard failure retained in `E/live-integration/` |
 | S | `E/dependency-advisories.json`, `E/source-security-inventory.json`, `E/security-runtime-final.json`: bounded security inspection |
@@ -63,7 +156,7 @@ AC and NFR mappings follow. Initial status refers to the state before this audit
 | FR-07 | Precision/Recall/mAP | Comparable evaluation | `src/training/evaluate.py` | Same fixed cohort/protocol | Partial | M: three versions and repeated baseline | Standardize comparison; report person weakness | Complete metrics; quality Partial |
 | FR-08 | MLflow experiments | Parameters, metrics, artifacts | `src/tracking/mlflow_utils.py` | Retrieved hashes, pilot logging | Complete | M, T, `E/registry.json` | None | Complete locally |
 | FR-09 | Registry stable candidate | Versioning plus quality approval | MLflow, `src/serving/deploy.py` | Registry/approval checks | Partial | Three experimental versions; main stable aliases empty | Correct labels/retrain before main promotion | Partial |
-| FR-10 | GitHub Actions CI/CD | Approved build/test/deploy | `.github/workflows/ci.yml` | Actual GitHub run on the dedicated runner | Complete historically | Run 39819556600 passed for implementation commit 944b56f; deployment disabled | Monitoring regression added and executed remotely | Complete validation/build; prior deployment evidence retained |
+| FR-10 | GitHub Actions CI/CD | Approved build/test/deploy | `.github/workflows/ci.yml` | Actual GitHub run on the dedicated runner | Complete historically | Run 39986295390 passed 95 tests, monitoring and Docker build for commit 32c2bf7; deployment disabled | Latest dependency pins verified remotely | Complete validation/build; prior deployment evidence retained |
 | FR-11 | Docker packaging | Reproducible serving image | `Dockerfile`, deployment module | Build and actual deployments | Complete | R2, build log, immutable image ID | Rebuild with decoder restriction | Complete |
 | FR-12 | FastAPI serving | Validated real predictions | `src/serving/api.py`, `console.py` | API tests, real browser upload | Complete API; Missing live UI | B, R2; original coordinates/identity | Added bounded local presentation console | Complete uploads and camera transport |
 | FR-13 | Prometheus | Actual operational metrics | API instrumentation, Compose | Fresh scrape + request counts | Complete | O and R2 recovery | None | Complete locally |
@@ -91,7 +184,7 @@ labels; the PRD names these attributes without numeric IDs.
 | AC-05 | Precision, recall, mAP | FR-07 | Fixed comparison | Partial | M | Protocol alignment performed | Complete metrics |
 | AC-06 | MLflow experiments/artifacts | FR-08 | Actual records/hashes | Complete | M,T | None | Complete |
 | AC-07 | Versioned selected model | FR-09 | Registry retrieval | Complete | `E/registry.json` | No promotion without approval | Complete registration |
-| AC-08 | GitHub workflow executes | FR-10 | Actual dispatched workflow | Complete historically | Run 39819556600 passed; 95 tests in 174.353 s | None for implementation validation | Complete |
+| AC-08 | GitHub workflow executes | FR-10 | Actual dispatched workflow | Complete | Run 39986295390: 95 tests in 178.927 s plus monitoring and Docker build | No remaining CI gap for implementation 32c2bf7 | Complete |
 | AC-09 | Docker/FastAPI serves | FR-11/12 | Browser + API | Complete | B,R2 | Hardened decoder | Complete |
 | AC-10 | Prometheus visible in Grafana | FR-13/14 | Live panel checks | Broken idle series | O | Query regression fixed | Complete |
 | AC-11 | Evidently drift analysis | FR-15 | Actual report | Complete | O | None | Complete local replay |
@@ -262,7 +355,7 @@ Raw dataset metadata, deployment and registry aliases remained unchanged.
 Do not generate extra predictions during its exact-count windows. Its acceptance section is
 limited to that runner's scope; R1/R2 supply the separate new rollback evidence.
 The monitoring regression uses the deployed Prometheus image and tests idle/active series.
-The current workflow invokes it. [GitHub run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600)
+The current workflow invokes it. Historical [GitHub run 39819556600](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39819556600)
 completed successfully on the dedicated Windows runner: **95 tests in 174.353 seconds**,
 monitoring regression and Docker build all passed. It tested implementation commit
 `944b56f8212ca784245cd7fe1c647ef4d2894ae6` with deployment set to `none`. That run predates the serving dependency migration below; it does not certify the new pins.
@@ -304,16 +397,27 @@ loaded successfully under the upgraded runtime. The final restored main v1 API u
 image, remains experimental, and has no main stable aliases. This is controlled-fault evidence,
 not person-quality acceptance. See R3 and `reports/security-upgrade-20261022/migration.json`.
 
-**Residual host dependency risk:** the separate Windows training environment still uses
-torch 2.2.2 and Pillow 10.2.0, which have advisory records.
-[PyTorch's critical advisory](https://github.com/pytorch/pytorch/security/advisories/GHSA-53q9-r3pm-6pq6)
-includes this torch version and warns that even `weights_only=True` can execute code when
-loading malicious checkpoints. Hash verification provides provenance, not a safe deserializer.
-Only the existing trusted local checkpoints are used; arbitrary uploaded model loading is absent.
-The serving upgrade does not make arbitrary pickle checkpoints safe to load. A tested
-Windows torch/torchvision/CUDA and Pillow migration is still required before production use.
-The locked training environment and its DVC dependency identity were preserved.
-PyPI advisory record counts include duplicate aliases and are not distinct vulnerability counts.
+**Windows training migration:** the active project environment now pins torch
+2.13.0+cu126, torchvision 0.28.0+cu126 and Pillow 13.0.0, with compatible
+certificate, HTTP, Git, NLP, telemetry and packaging security updates. An isolated
+216-package environment passed dependency consistency, all 95 tests, CPU/CUDA
+arithmetic and NMS, and CPU/GPU inference for all three saved model versions.
+The active environment matches its complete freeze. The original environment and
+manifests are preserved under `reports/release-finalization-20261023/`.
+
+**Residual host dependency constraints:** version-specific PyPI advisory metadata
+still reports records for asyncssh 2.23.1, cryptography 43.0.3, pyOpenSSL 24.2.1
+and diskcache 5.6.3. These records include duplicate aliases and do not count
+unique vulnerabilities. The approved Google Drive integration's PyDrive2 1.21.3
+requires cryptography<44 and pyOpenSSL<=24.2.1. The minimum fixed AsyncSSH 2.24.0
+requires cryptography>=48.0.1; pyOpenSSL 26.0.0 requires cryptography>=46,<47.
+Forcing these upgrades would break the approved storage adapter's dependency
+contract. Diskcache 5.6.3 has no fixed release in the inspected metadata; keep its
+cache writable only by trusted local users. No incompatible upgrade was forced.
+The application only loads existing trusted, hash-verified checkpoints; hashes
+provide identity and do not make arbitrary pickle deserialization safe.
+See `reports/release-finalization-20261023/upgraded/candidate-advisories.json`
+and `minimum-fix-constraints.json` for exact checked metadata.
 
 ## Literature comparison
 
@@ -410,8 +514,8 @@ in a particular live scene.
 | Not improved / inconclusive | Full-train/assisted models and batch/FP16 experiments | No superior three-class model or speed win claimed; keep measured baseline |
 | Blocked by missing evidence | Original Kaggle URL/version; complete person labels; quality-approved stable predecessor | Obtain provenance and audited labels, retrain/evaluate, then approve a main stable model |
 | External / unverified | Current Google Drive availability and full paper protocols | Prior storage receipt retained; no new remote data transfer. Current GitHub implementation validation passed |
-| Not completed in this audit | Host CUDA dependency migration, training-resume CLI, early-stopping benefit, worker/cache/AMP sweep, GPU utilization trace, real crash/power-loss injection | Serving Python dependency migration is verified separately above; remaining work applies before broader deployment |
-| Production blocker | Vulnerable host training dependencies and unaccepted model quality | Upgrade and regression-test the host environment; establish quality gates before network/public use |
+| Not completed in this audit | Training-resume CLI, early-stopping benefit, worker/cache/AMP sweep, GPU utilization trace, real crash/power-loss injection | Serving Python dependency migration is verified separately above; remaining work applies before broader deployment |
+| Production blocker | Residual storage-adapter/cache advisories and unaccepted model quality | Resolve upstream dependency constraints and establish quality gates before network/public use |
 
 No promise of fully autonomous natural camera-error detection is made. Natural quality failure
 needs trustworthy labeled evidence and an approved predecessor. The college demonstration
