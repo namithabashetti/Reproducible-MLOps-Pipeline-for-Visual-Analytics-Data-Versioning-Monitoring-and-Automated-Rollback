@@ -11,7 +11,7 @@ from unittest.mock import MagicMock, patch
 import numpy as np
 import yaml
 
-from src.monitoring.drift import DEFINITION, FEATURES, collect, compare, export_report, image_features, psi
+from src.monitoring.drift import DEFINITION, FEATURES, collect, compare, digest, export_report, image_features, psi
 from PIL import Image
 
 
@@ -133,6 +133,15 @@ class DriftTests(unittest.TestCase):
                 with self.assertRaisesRegex(ValueError, "settings changed"):
                     collect(project, "current", project / "observations.json")
             self.assertFalse((project / "observations.json").exists())
+            # Expanded training data must not be mistaken for the monitoring population.
+            manifest.update(status='ready', dataset_dvc_md5='expanded-training')
+            prediction['inference_sha256'] = digest(manifest['inference'])
+            with patch('src.monitoring.drift.requests.Session') as factory, \
+                    patch('src.monitoring.drift.subprocess.check_output', return_value='fixture'):
+                factory.return_value.__enter__.return_value = session
+                result = collect(project, 'current', project / 'observations.json')
+            self.assertEqual(result['identity']['dataset_dvc_md5'], 'expanded-training')
+            self.assertEqual(result['identity']['monitoring_dataset_dvc_md5'], 'fixture')
 
 
 if __name__ == "__main__":

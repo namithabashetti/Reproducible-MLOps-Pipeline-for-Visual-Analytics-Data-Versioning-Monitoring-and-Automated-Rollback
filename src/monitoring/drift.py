@@ -73,8 +73,9 @@ def collect(project, pool, output):
         identity = {key: manifest[key] for key in
                     ("model_name", "model_version", "checkpoint_sha256", "inference", "dataset_dvc_md5")}
         raw_md5 = yaml.safe_load((project / "dataset.dvc").read_text())["outs"][0]["md5"]
-        if identity["dataset_dvc_md5"] != raw_md5:
-            raise ValueError("Serving baseline and local raw dataset identities differ")
+        # Training lineage and the replay population have separate identities.
+        # Requiring equality made expanded-data checkpoints impossible to monitor.
+        identity['monitoring_dataset_dvc_md5'] = raw_md5
         identity["split_sha256"] = hashlib.sha256(split_bytes).hexdigest()
         identity["feature_definition"] = DEFINITION
         identity["feature_opencv_version"] = cv2.__version__

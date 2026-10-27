@@ -14,7 +14,7 @@ import yaml
 from src.data.validate import validate_dataset
 
 
-def verify_restore(project, local_cache=False, remote="b2"):
+def verify_restore(project, local_cache=False, remote="gdrive"):
     if remote not in ("b2", "gdrive"):
         raise ValueError("Supported remotes are b2 and gdrive")
     label = "Google Drive" if remote == "gdrive" else "B2"
@@ -88,7 +88,7 @@ if __name__ == "__main__":
     source = parser.add_mutually_exclusive_group()
     source.add_argument("--local-cache", action="store_true",
                         help="Verify local cache recovery only; this does not test cloud storage")
-    source.add_argument("--remote", choices=("b2", "gdrive"), default="b2")
+    source.add_argument("--remote", choices=("b2", "gdrive"), default="gdrive")
     args = parser.parse_args()
     print(json.dumps(verify_restore(Path(__file__).resolve().parents[2], args.local_cache,
                                     args.remote), indent=2))

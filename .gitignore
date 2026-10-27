@@ -1,5 +1,7 @@
 # Dataset bytes are managed by DVC, never Git.
 /dataset/
+# Supplied additional raw images; derived data is tracked through DVC.
+/archive (2)/
 /data/processed/
 /data/person-corrected-*/
 /artifacts/
@@ -44,3 +46,4 @@ kaggle.json
 .vscode/
 Thumbs.db
 Desktop.ini
+/demo-images

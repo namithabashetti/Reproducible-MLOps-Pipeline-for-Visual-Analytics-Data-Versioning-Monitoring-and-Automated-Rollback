@@ -1,6 +1,7 @@
 """Loopback-only presentation console; inference stays in the existing Docker API."""
 
 import hashlib
+from io import BytesIO
 import json
 import os
 from pathlib import Path
@@ -10,27 +11,76 @@ import subprocess
 import sys
 from threading import Lock
 from uuid import uuid4
+from zipfile import ZipFile, ZIP_DEFLATED
 
 from fastapi import FastAPI, HTTPException, Request
 from fastapi.responses import HTMLResponse, Response
 from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
+from src.monitoring.dashboard import evidence_metrics, project_status
 import requests
 
 ROOT = Path(__file__).resolve().parents[2]
 API = 'http://127.0.0.1:8000'
 MAX_BYTES = 4 * 1024 * 1024
 TOKEN = secrets.token_urlsafe(32)
+SAMPLES = {
+    'css-e655ed922fb27bc2a40af8d2': ('New: workers in a row', 'Additional validation image: compare person boxes.'),
+    'css-7fdd6457c593392b8fc47646': ('New: site inspection', 'Additional validation image: some distant people are still missed.'),
+    'css-1e68af9b6ef60871ca6ec6ae': ('New: indoor ladder work', 'Additional validation image: two people at different heights.'),
+    'css-3f01c8c0a88e712f7d82e4fa': ('New: outdoor ladder work', 'Additional validation image: helmet and uncovered head.'),
+    'hard_hat_workers1017': ('Helmets and uncovered heads', 'Several workers indoors.'),
+    'hard_hat_workers108': ('Two workers outdoors', 'Bright sky and clear helmets.'),
+    'hard_hat_workers3058': ('Small, distant helmets', 'A harder scene with smaller objects.'),
+    'hard_hat_workers4965': ('A group of workers', 'Several helmets in a busy scene.'),
+    'hard_hat_workers2158': ('Partly hidden workers', 'Equipment covers part of the scene.'),
+    'hard_hat_workers1209': ('A distant worker', 'A small worker near industrial equipment.'),
+    'hard_hat_workers1215': ('Working at height', 'Two workers in different positions.'),
+    'hard_hat_workers1234': ('Workers near branches', 'A busy background with several helmets.'),
+}
+SAMPLE_GUIDE = '''TEST IMAGES - MODEL COMPARISON AND AUTOMATIC ROLLBACK
+
+Four css-* PNGs are additional validation images, outside training. They were
+selected after comparing actual predictions to illustrate person-box improvements.
+Eight hard_hat_workers* PNGs are from the existing held-out monitoring pool.
+These selected examples are not an independent accuracy benchmark.
+Person detection and source-label completeness remain limitations.
+
+1. Open http://127.0.0.1:8767/ and choose a test image or upload a PNG.
+2. The normal detector uses trained model 4. Read the active model label.
+3. Select trained model 4 in the rollback panel and start the rollback demo.
+4. The demo tests model 1, then deliberately sets the candidate confidence to 1.0.
+   This suppresses detections. It does not show natural model degradation.
+5. Try the SAME images before, during and after the candidate stage.
+6. The controller measures a separate batch of 250 labeled images. One uploaded
+   image or missed camera frame cannot establish a quality failure.
+7. A qualifying drop restores model 1 and checks real predictions again.
+8. After the test, the normal detector (model 4) is restored.
+
+The copied demo registry calls its candidate version 2. Its trained source is
+model 4 when selected. Existing trained model 2 has not been overwritten.
+Model 4 trained for 60 epochs on 6,020 images, including 2,520 additional images.
+The dashboard displays a shared 196-image evaluation with explicit settings.
+Scores from older evaluations with different settings must not be mixed with it.
+Model 4 has the highest shared score; person detection is still imperfect.
+No production quality approval. Fresh protocol training is a separate experiment.
+The new 1,154-image test split is eligible only for fresh protocol training;
+older models trained on some images reassigned to that split.
+'''
+
 app = FastAPI(title='Visual analytics live console', docs_url=None, redoc_url=None, openapi_url=None)
-app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost'])
+app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'host.docker.internal'])
 lock = Lock()
-job = {'process': None, 'output': None, 'misses': 0}
+job = {'process': None, 'output': None, 'misses': 0, 'candidate_version': '3'}
 JOB_FILE = ROOT / 'reports/live-console-job.json'
 if JOB_FILE.exists():
     try:
-        saved_name = json.loads(JOB_FILE.read_text())['directory']
+        saved = json.loads(JOB_FILE.read_text())
+        saved_name = saved['directory']
         if re.fullmatch(r'live-demo-[0-9a-f]{12}', saved_name):
             job['output'] = ROOT / 'reports' / saved_name
+            if saved.get('candidate_version') in ('2', '3', '4'):
+                job['candidate_version'] = saved['candidate_version']
     except (ValueError, KeyError, TypeError):
         pass
 
@@ -79,9 +129,66 @@ def health():
     return call_api('/health')
 
 
+@app.get('/project/status')
+def project_evidence():
+    return project_status(ROOT)
+
+
+@app.get('/metrics')
+def metrics():
+    return Response(evidence_metrics(ROOT),media_type='text/plain; version=0.0.4; charset=utf-8')
+
+
 @app.get('/sample')
 def sample():
     return Response((ROOT / 'dataset/images/hard_hat_workers1015.png').read_bytes(), media_type='image/png')
+
+
+def sample_bytes(image_id):
+    if image_id not in SAMPLES:
+        raise HTTPException(404, 'Unknown test image')
+    folder = 'data/expanded-css-v1/images/validation' if image_id.startswith('css-') else 'data/processed/images/monitoring_current'
+    path = ROOT / folder / (image_id + '.png')
+    if not path.is_file():
+        raise HTTPException(503, 'Test image is unavailable. Restore the existing processed dataset.')
+    return path.read_bytes()
+
+
+@app.get('/samples')
+def samples():
+    return [{'id': key, 'title': value[0], 'description': value[1], 'url': '/samples/' + key}
+            for key, value in SAMPLES.items()]
+
+
+@app.get('/samples/{image_id}')
+def sample_image(image_id: str):
+    return Response(sample_bytes(image_id), media_type='image/png')
+
+
+@app.get('/sample-pack')
+def sample_pack():
+    output = BytesIO()
+    with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
+        archive.writestr('START-HERE.txt', SAMPLE_GUIDE)
+        for image_id in SAMPLES:
+            archive.writestr(image_id + '.png', sample_bytes(image_id))
+    return Response(output.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition': 'attachment; filename="mlops-test-images.zip"'})
+
+
+@app.get('/faculty-pack')
+def faculty_pack():
+    names = ('test_normal_01.png', 'test_changed_data_01.png', 'test_indoor_ladder_01.png',
+             'test_outdoor_ladder_01.png', 'START-HERE.md', 'SOURCE-NOTICE.txt', 'sources.json')
+    folder = ROOT / 'demo-images'
+    if not all((folder / name).is_file() for name in names):
+        raise HTTPException(503, 'Faculty images are unavailable. Restore demo-images.dvc.')
+    output = BytesIO()
+    with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
+        for name in names:
+            archive.writestr(name, (folder / name).read_bytes())
+    return Response(output.getvalue(), media_type='application/zip',
+                    headers={'Content-Disposition': 'attachment; filename="faculty-test-images.zip"'})
 
 
 def request_audit():
@@ -126,11 +233,15 @@ async def start_demo(request: Request):
             raise HTTPException(413, 'Control request too large')
         body.extend(chunk)
     try:
-        mode = json.loads(body)['mode']
+        control = json.loads(body)
+        mode = control['mode']
+        candidate_version = control.get('candidate_version', '3')
     except (ValueError, KeyError, TypeError):
         raise HTTPException(400, 'Choose quality or outage')
     if mode not in ('quality', 'outage'):
         raise HTTPException(400, 'Choose quality or outage')
+    if candidate_version not in ('2', '3', '4'):
+        raise HTTPException(400, 'Choose trained model 2, 3 or 4')
     with lock:
         if (job['process'] and job['process'].poll() is None) or (ROOT / 'artifacts/serving/deployment.lock').exists():
             raise HTTPException(409, 'A deployment/demo is already running; wait for restoration')
@@ -140,11 +251,12 @@ async def start_demo(request: Request):
         log = output.with_suffix('.log')
         with log.open('wb') as stream:
             process = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/demo_rollback.py'),
-                '--output', str(output), '--mode', mode], cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
+                '--output', str(output), '--mode', mode, '--candidate-version', candidate_version],
+                cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
                 creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        job.update(process=process, output=output, misses=0)
+        job.update(process=process, output=output, misses=0, candidate_version=candidate_version)
         from src.serving.deploy import write_receipt
-        write_receipt(JOB_FILE, {'directory': output.name})
+        write_receipt(JOB_FILE, {'directory': output.name, 'candidate_version': candidate_version})
     return {'status': 'starting', 'report_directory': str(output)}
 
 
@@ -182,7 +294,10 @@ def demo_status():
         exit_code = None if (ROOT / 'artifacts/serving/deployment.lock').exists() else 1
     if exit_code not in (None, 0):
         progress = {'stage': 'failed', 'message': 'Demo failed. Read the log and check API health; do not claim recovery.'}
+    if process is None and not result:
+        progress = {'stage': 'needs_check', 'message': 'Previous test has no final result. Check its process and detector before starting another.'}
     return {'running': exit_code is None, 'exit_code': exit_code, 'progress': progress, 'audit': audit,
+            'source_versions': result.get('source_versions') if result else ['1', job['candidate_version']],
             'result': {'status': result['status'], 'recovered_map50_95': result.get('recovered_map50_95'),
                        'quality_approval': False, 'original_api_restored': 'original_api_restored' in result} if result else None,
             'report_directory': str(output), 'log': tail}

@@ -1375,7 +1375,7 @@ the functioning MLOps demonstration, not full three-class model acceptance.
 Annotation work is paused with its records and history preserved. No additional
 training or automatic acceptance of unfinished labels is performed. Main registry
 stable aliases remain unassigned; no quality approval is implied by this scope
-change. docs/demo-handoff.md records launch/restart commands, the repeatable live
+change. docs/faculty-demo.md records launch/restart commands, the repeatable live
 rollback demonstration, evidence locations and limitations for assessment.
 
 
@@ -1397,7 +1397,7 @@ quality approval. Version 1 had the best same-cohort AP50-95 and stays experimen
 Short batch/FP16 experiments did not establish a better model or speed win.
 
 The canonical audit is docs/final-audit.md; the presentation guide is
-docs/vscode-demo.md. Original inputs, annotation records and historical evidence
+docs/faculty-demo.md. Original inputs, annotation records and historical evidence
 remain intact. No uncertain file was deleted. Remaining production blockers
 include incomplete person labels, unknown upstream dataset version and vulnerable
 locked torch/Pillow dependencies; restricting image decoders is containment,
@@ -1466,3 +1466,23 @@ committed. Full three-class quality and original upstream provenance remain open
 [GitHub run 39986295390](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/39986295390) passed all 95 tests (178.927 seconds), dependency consistency, compilation, monitoring validation and the CPU Docker build for implementation commit `32c2bf7059c23b383ef855092ffbea30ea995771`. Deployment was disabled.
 The final handoff commit records this outcome and changes only documentation.
 The temporary runner is stopped after the job; the local demo services stay up.
+
+## 27 October 2026 — final audit amendment
+
+The user reconfirmed Google Drive as the approved DVC remote. No GCS/B2 switch
+or chargeable remote transfer was performed. The final checklist's 70/15/15
+requirement is implemented in a new grouped export, preserving the old exports
+and checkpoints. Fresh protocol training is required because old checkpoints
+have seen some images reassigned to the new final test set.
+
+The main UI now reads actual shared evaluations and recovery history; Grafana
+includes real requests/errors/latency/confidence/classes and separately labeled
+recorded quality and drift evidence. Both controlled quality and outage rollback
+passed on the updated image. Normal model 4 and empty main stable aliases were
+restored after each test. Detailed current evidence is in final-audit.md.
+
+Presentation documentation is consolidated in faculty-demo.md. The old guides
+were moved into reports/final-audit-20261026/retired-guides, and the pre-change
+source/docs ZIP remains available. No original images, model checkpoints or
+historical audit evidence were deleted. The resumed fresh training and queued
+final evaluation are not yet claimed complete.

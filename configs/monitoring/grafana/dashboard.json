@@ -2,7 +2,7 @@
   "uid": "visual-analytics-operations",
   "title": "Visual analytics \u2014 Operations",
   "schemaVersion": 41,
-  "version": 2,
+  "version": 4,
   "editable": false,
   "tags": [
     "visual-analytics",
@@ -205,7 +205,8 @@
               "model_name": 0,
               "model_version": 1,
               "deployment_mode": 2,
-              "deployment_id": 3
+              "deployment_id": 3,
+              "dataset_version": 4
             }
           }
         }
@@ -415,6 +416,577 @@
         "tooltip": {
           "mode": "single"
         }
+      }
+    },
+    {
+      "id": 8,
+      "title": "Requests per minute",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 17,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Actual completed API requests per minute. Includes errors; idle is zero after enough scrapes.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "60 * sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\"}[2m]))",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "reqpm",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 9,
+      "title": "Average response time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 17,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Measured API handling time; absent when no eligible requests.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,deployment_id) (rate(va_prediction_duration_seconds_sum{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])) / (sum by(model_version,deployment_id) (rate(va_prediction_duration_seconds_count{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])) > 0)",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 10,
+      "title": "p99 response time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Histogram estimate from actual requests. Missing traffic is unavailable.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "histogram_quantile(0.99, sum by(le,model_version,deployment_id) (rate(va_prediction_duration_seconds_bucket{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m]))) and on(model_version,deployment_id) (sum by(model_version,deployment_id) (rate(va_prediction_duration_seconds_count{job=\"visual-analytics-api\",outcome!=\"client_error\"}[2m])) > 0)",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 11,
+      "title": "Prediction confidence by class",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 24,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Mean confidence of returned boxes, not accuracy. Classes with no boxes have no value.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,class_name) (rate(va_detection_confidence_sum{job=\"visual-analytics-api\"}[2m])) / (sum by(model_version,class_name) (rate(va_detection_confidence_count{job=\"visual-analytics-api\"}[2m])) > 0)",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 12,
+      "title": "Objects detected by class",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 31,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Returned boxes since process start, not ground-truth counts; multiple boxes can belong to one image.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_detected_objects_total{job=\"visual-analytics-api\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 13,
+      "title": "Model inference time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 31,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Actual prediction-call time, excluding decoding and queue wait.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,deployment_id) (rate(va_inference_seconds_sum{job=\"visual-analytics-api\"}[2m])) / (sum by(model_version,deployment_id) (rate(va_inference_seconds_count{job=\"visual-analytics-api\"}[2m])) > 0)",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 14,
+      "title": "Last evaluated model scores",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 38,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Recorded shared validation metrics. These are not live production accuracy. Cohort and dataset version are labels.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_validation_score{job=\"visual-analytics-evidence\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 15,
+      "title": "Last controlled rollback",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 38,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Saved demo event: failed candidate, recovered predecessor, failure reason and result. Not a current health claim.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_last_rollback{job=\"visual-analytics-evidence\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 16,
+      "title": "Drift evidence availability",
+      "type": "stat",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 45,
+        "w": 12,
+        "h": 7
+      },
+      "description": "1 means fresh complete evidence for the current checkpoint; 0 means unavailable, stale, incompatible or incomplete. It does not mean no drift.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_drift_available{job=\"visual-analytics-evidence\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          },
+          "mappings": [
+            {
+              "type": "value",
+              "options": {
+                "0": {
+                  "text": "Unavailable / stale",
+                  "color": "orange"
+                },
+                "1": {
+                  "text": "Fresh evidence",
+                  "color": "green"
+                }
+              }
+            }
+          ]
+        },
+        "overrides": []
+      },
+      "options": {
+        "reduceOptions": {
+          "calcs": [
+            "lastNotNull"
+          ],
+          "values": false
+        },
+        "colorMode": "value",
+        "graphMode": "none"
+      }
+    },
+    {
+      "id": 17,
+      "title": "Measured data change",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 45,
+        "w": 12,
+        "h": 7
+      },
+      "description": "PSI, KS statistic and p-value from actual reserved-pool replays. Absent when stale or incompatible. Drift alone never triggers rollback.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_drift_value{job=\"visual-analytics-evidence\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 18,
+      "title": "Successful and failed requests",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 52,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Real cumulative successes, invalid inputs and server errors; resets at process restart.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,outcome) (va_prediction_requests_total{job=\"visual-analytics-api\"})",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
+      }
+    },
+    {
+      "id": 19,
+      "title": "All API errors",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 52,
+        "w": 12,
+        "h": 7
+      },
+      "description": "Client errors plus server errors divided by all requests. Health policy evaluates server errors separately.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\",outcome!=\"success\"}[2m])) / (sum by(model_version,deployment_id) (rate(va_prediction_requests_total{job=\"visual-analytics-api\"}[2m])) > 0)",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 20,
+      "title": "Recorded quality by class",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 59,
+        "w": 24,
+        "h": 8
+      },
+      "description": "Shared validation labels, not live accuracy. Person-label completeness remains a limitation.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_class_validation_score{job=\"visual-analytics-evidence\"}",
+          "legendFormat": "{{model_version}} {{class_name}} {{metric}} {{feature}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "percentunit",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "showHeader": true
       }
     }
   ],

@@ -201,8 +201,9 @@ class HealthTests(unittest.TestCase):
             candidate = deepcopy(self.evidence["identity"])
             candidate["inference"]["image_size"] = 416
             candidate["deployment_mode"] = "experimental"
+            candidate['classes'] = config['dataset']['classes']
             baseline = deepcopy(candidate)
-            baseline.update(model_version="1", checkpoint_sha256="stable")
+            baseline.update(model_version="1", checkpoint_sha256="stable", dataset_dvc_md5='different-training-version')
             (root / "artifacts/serving/deployment.json").write_text(json.dumps({"container_id": "fixture", "model": candidate}))
             names = [f"image-{i}" for i in range(200)]
             (root / "data/splits.json").write_text(json.dumps({"splits": {"monitoring_current": names, "test": ["untouched"]}}))
@@ -214,9 +215,11 @@ class HealthTests(unittest.TestCase):
             with patch("src.tracking.mlflow_utils.local_store", return_value=(client, None, {"model_name": "fixture"})), \
                     patch("src.serving.deploy.stage_model", side_effect=[(root / "baseline", baseline), (root / "candidate", candidate)]), \
                     patch("src.monitoring.audit.subprocess.check_output", return_value="{}"), \
+                    patch('src.monitoring.audit.verify_audit_membership') as membership, \
                     patch("ultralytics.YOLO") as yolo, patch("ultralytics.settings.update"), patch("torch.set_num_threads"):
                 yolo.return_value.val.side_effect = [SimpleNamespace(box=SimpleNamespace(map=.8)), SimpleNamespace(box=SimpleNamespace(map=.7))]
                 report = labeled_audit(root, root / "audit")
+            self.assertEqual(membership.call_count, 2)
             self.assertEqual(report["images"], 200)
             self.assertEqual(report["baseline_batch_sha256"], report["candidate_batch_sha256"])
             self.assertEqual(report["candidate_map50_95"], .7)

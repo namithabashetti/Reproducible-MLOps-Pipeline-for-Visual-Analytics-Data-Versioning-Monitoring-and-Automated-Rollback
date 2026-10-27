@@ -100,8 +100,20 @@ async def lifespan(app):
     info.labels(*labels).info({
         "model_name": manifest["model_name"], "checkpoint_sha256": manifest["checkpoint_sha256"],
         "deployment_mode": manifest["deployment_mode"],
+        "dataset_version": manifest.get("dataset_dvc_md5", "unavailable"),
         "inference_sha256": hashlib.sha256(json.dumps(manifest["inference"], sort_keys=True).encode()).hexdigest()})
-    app.state.metrics = {"registry": registry, "requests": requests, "latency": latency, "labels": labels}
+    detections = Counter('va_detected_objects', 'Returned boxes by class; not ground-truth object counts',
+                         (*label_names, 'class_name'), registry=registry)
+    confidence = Histogram('va_detection_confidence', 'Confidence of returned boxes; not accuracy',
+                           (*label_names, 'class_name'), buckets=(.1,.25,.4,.5,.6,.7,.8,.9,1), registry=registry)
+    inference = Histogram('va_inference_seconds', 'Model prediction call time excluding decoding and queue wait',
+                          label_names, buckets=(.01,.025,.05,.1,.2,.5,1,2,5),registry=registry)
+    empty = Counter('va_empty_predictions', 'Successful predictions returning no boxes',label_names,registry=registry)
+    for name in ('helmet','head','person'):
+        detections.labels(*labels,name)
+        confidence.labels(*labels,name)
+    app.state.metrics = {"registry": registry, "requests": requests, "latency": latency, "labels": labels,
+                         'objects':detections, 'confidence':confidence,'inference':inference,'empty':empty}
     app.state.ready = True
     logging.getLogger(__name__).info("Loaded %s version %s (%s)",
                                     app.state.manifest["model_name"],
@@ -152,6 +164,7 @@ def health(request: Request):
 
 @app.post("/predict")
 async def predict(request: Request):
+    started = perf_counter()
     state = request.app.state
     if not getattr(state, "ready", False):
         raise HTTPException(503, "Model is not ready")
@@ -167,13 +180,23 @@ async def predict(request: Request):
     # Ultralytics keeps mutable predictor state; serialize inference without blocking /health.
     async with state.inference_lock:
         try:
+            inference_started = perf_counter()
             detections = await run_in_threadpool(predict_image, state.model, image, settings)
+            inference_seconds = perf_counter() - inference_started
         except Exception as error:
             logging.getLogger(__name__).exception("Prediction failed")
             raise HTTPException(500, "Model inference failed") from error
+    metrics = state.metrics
+    metrics['inference'].labels(*metrics['labels']).observe(inference_seconds)
+    if not detections:
+        metrics['empty'].labels(*metrics['labels']).inc()
+    for detection in detections:
+        metrics['objects'].labels(*metrics['labels'],detection['class_name']).inc()
+        metrics['confidence'].labels(*metrics['labels'],detection['class_name']).observe(detection['confidence'])
     return {"model_name": state.manifest["model_name"],
             "model_version": state.manifest["model_version"],
             "checkpoint_sha256": state.manifest["checkpoint_sha256"],
             "inference_sha256": hashlib.sha256(json.dumps(settings, sort_keys=True).encode()).hexdigest(),
             "deployment_mode": state.manifest["deployment_mode"],
+            'inference_ms':inference_seconds*1000, 'processing_ms':(perf_counter()-started)*1000,
             "width": image.shape[1], "height": image.shape[0], "detections": detections}

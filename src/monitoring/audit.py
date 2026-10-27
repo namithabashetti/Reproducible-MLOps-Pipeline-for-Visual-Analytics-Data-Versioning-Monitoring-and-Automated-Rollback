@@ -9,11 +9,26 @@ from pathlib import Path
 import shutil
 import subprocess
 import sys
+import tempfile
 import time
 
 import yaml
 
 from src.monitoring.health import iso, model_identity, save
+
+
+def verify_audit_membership(client, manifest, names):
+    """Check the registered training selection, independently of training dataset ID."""
+    with tempfile.TemporaryDirectory(prefix="visual-analytics-audit-selection-") as temporary:
+        hashes = json.loads(Path(client.download_artifacts(manifest['run_id'], 'bundle-sha256.json', temporary)).read_text())
+        if hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest() != manifest['bundle_sha256']:
+            raise ValueError('Registered audit membership bundle changed')
+        selection = Path(client.download_artifacts(manifest['run_id'], 'inputs/selection.json', temporary))
+        if hashlib.sha256(selection.read_bytes()).hexdigest() != hashes.get('inputs/selection.json'):
+            raise ValueError('Registered training selection hash mismatch')
+        selected = json.loads(selection.read_text())
+        if set(selected) != {'train', 'validation'} or set(names) & set(selected['train']):
+            raise ValueError('Audit images overlap registered training membership')
 
 
 def labeled_audit(project, output):
@@ -39,14 +54,16 @@ def labeled_audit(project, output):
                                                     receipt["model"]["deployment_mode"] == "experimental")
     if model_identity(candidate_manifest) != model_identity(receipt["model"]):
         raise ValueError("Candidate settings differ from the deployed manifest")
-    if baseline_manifest["dataset_dvc_md5"] != candidate_manifest["dataset_dvc_md5"]:
-        raise ValueError("Baseline and candidate need a common labeled dataset identity")
+    if baseline_manifest['classes'] != candidate_manifest['classes']:
+        raise ValueError('Baseline and candidate class mappings differ')
     splits_path = project / "data/splits.json"
     splits = json.loads(splits_path.read_text())["splits"]
     names = splits["monitoring_current"]
     if len(set(names)) != len(names) or len(names) < config["health"]["labeled_audit_min_images"] or \
             set(names) & {n for key, values in splits.items() if key != "monitoring_current" for n in values}:
         raise ValueError("Audit must use a sufficiently large isolated monitoring pool")
+    for manifest in (baseline_manifest, candidate_manifest):
+        verify_audit_membership(client, manifest, names)
     inputs = output / "inputs"
     hashes = {}
     for category, suffix in (("images", ".png"), ("labels", ".txt")):

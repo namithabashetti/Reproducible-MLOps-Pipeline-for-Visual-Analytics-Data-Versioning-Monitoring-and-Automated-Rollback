@@ -85,6 +85,8 @@ class ServingTests(unittest.IsolatedAsyncioTestCase):
                 self.assertEqual(code, 200)
                 self.assertEqual((result["width"], result["height"], result["detections"]), (4, 5, []))
                 self.assertEqual(result["deployment_mode"], "experimental")
+                self.assertGreater(result['inference_ms'],0)
+                self.assertGreaterEqual(result['processing_ms'],result['inference_ms'])
                 self.assertEqual(result["inference_sha256"], hashlib.sha256(
                     json.dumps(manifest["inference"], sort_keys=True).encode()).hexdigest())
                 inference.side_effect = RuntimeError("fixture failure")

@@ -76,7 +76,7 @@ class RestoreTests(unittest.TestCase):
             remote_xml.chmod(0o600)
             remote_xml.unlink()
             with self.assertRaises(subprocess.CalledProcessError):
-                verify_restore(project)
+                verify_restore(project, remote="b2")
             self.assertFalse((project / "reports/b2-restore.json").exists())
             recovery_caches = list((project / "reports/b2-restore-cache").glob("*/*"))
             self.assertEqual(len(recovery_caches), 1)
@@ -87,7 +87,7 @@ class RestoreTests(unittest.TestCase):
             remote_image.chmod(0o600)
             remote_image.unlink()
             remote_xml.write_bytes(xml_bytes)
-            result = verify_restore(project)
+            result = verify_restore(project, remote="b2")
             self.assertTrue(result["verified"] and result["resumed"] and result["isolated_cache"])
             self.assertFalse(result["fresh_cache"])
             self.assertEqual(result["content_manifest_sha256"], original["content_manifest_sha256"])
@@ -97,7 +97,7 @@ class RestoreTests(unittest.TestCase):
             remote_image.write_bytes((project / "dataset/images/sample.png").read_bytes())
             subprocess.run([sys.executable, "-m", "dvc", "remote", "add", "gdrive",
                             str(project / "unused-remote")], cwd=project, check=True)
-            drive_result = verify_restore(project, remote="gdrive")
+            drive_result = verify_restore(project)
             self.assertEqual(drive_result["source"], "google_drive")
             self.assertTrue(drive_result["fresh_cache"])
             self.assertFalse(drive_result["resumed"])

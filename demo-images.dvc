@@ -1,0 +1,6 @@
+outs:
+- md5: cadfa27fbab27487805d865320b45b75.dir
+  size: 892662
+  nfiles: 7
+  hash: md5
+  path: demo-images

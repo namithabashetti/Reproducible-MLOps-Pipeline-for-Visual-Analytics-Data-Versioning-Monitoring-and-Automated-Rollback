@@ -16,6 +16,61 @@ import mlflow
 
 
 class TrackingTests(unittest.TestCase):
+    def test_resume_evidence_is_registered_and_tampering_is_rejected(self):
+        resume = self.directory/'resumes/fixture'
+        (resume/'before').mkdir(parents=True)
+        saved = resume/'before/last.pt'
+        saved.write_bytes(b'synthetic interrupted checkpoint')
+        (resume/'resume.json').write_text(json.dumps({'status':'completed',
+            'sha256':{'before/last.pt':file_hash(saved)}}))
+        self.assertIn('resumes/fixture/before/last.pt',read_completed_run(self.directory)[4])
+        receipt = log_completed_run(self.root,self.directory)
+        client,_,_ = local_store(self.root)
+        with tempfile.TemporaryDirectory() as temporary:
+            restored = Path(client.download_artifacts(receipt['run_id'],
+                            'resumes/fixture/before/last.pt',temporary))
+            self.assertEqual(restored.read_bytes(),saved.read_bytes())
+        saved.write_bytes(b'changed interrupted checkpoint')
+        with self.assertRaisesRegex(ValueError,'Resume evidence changed'):
+            read_completed_run(self.directory)
+
+    def test_expanded_identity_and_actual_input_bytes_are_verified(self):
+        directory=self.directory
+        inputs=directory/'inputs'
+        hashes={}
+        for split,name in [('train','a'),('validation','b')]:
+            for kind,suffix in [('images','.png'),('labels','.txt')]:
+                p=inputs/kind/split/(name+suffix)
+                p.parent.mkdir(parents=True,exist_ok=True)
+                p.write_bytes(b'fixture input')
+                hashes[p.relative_to(inputs).as_posix()]=file_hash(p)
+        (inputs/'audit.json').write_text('{}')
+        manifest={'selection':{'train':['a'],'validation':['b'],'test':['held-out']},'audit_sha256':file_hash(inputs/'audit.json')}
+        (inputs/'manifest.json').write_text(json.dumps(manifest))
+        (inputs/'input-sha256.json').write_text(json.dumps(hashes))
+        for name in ('README.dataset.txt','README.roboflow.txt'):
+            (inputs/name).write_text('fixture provenance')
+        pointer=directory/'source/data/expanded-fixture.dvc'
+        pointer.parent.mkdir(parents=True)
+        pointer.write_text(yaml.safe_dump({'outs':[{'path':'expanded-fixture','md5':'expanded.dir'}]}))
+        lineage=json.loads((directory/'lineage.json').read_text())
+        lineage['base_data']={key:lineage[key] for key in ('dataset_dvc_md5','processed_dvc_md5','splits_dvc_md5')}
+        lineage.update(dataset_dvc_md5='expanded.dir',processed_dvc_md5='expanded.dir',splits_dvc_md5=None,
+                       selection_sha256=file_hash(inputs/'selection.json'),
+                       expanded_data={'path':'data/expanded-fixture','dvc_md5':'expanded.dir','manifest_sha256':file_hash(inputs/'manifest.json')})
+        lineage['file_sha256']['data/expanded-fixture.dvc']=file_hash(pointer)
+        (directory/'lineage.json').write_text(json.dumps(lineage))
+        self.assertEqual(read_completed_run(directory)[0]['dataset_dvc_md5'],'expanded.dir')
+        lineage['dataset_dvc_md5']='raw.dir'
+        (directory/'lineage.json').write_text(json.dumps(lineage))
+        with self.assertRaisesRegex(ValueError,'Expanded dataset identity mismatch'):
+            read_completed_run(directory)
+        lineage['dataset_dvc_md5']='expanded.dir'
+        (directory/'lineage.json').write_text(json.dumps(lineage))
+        (inputs/'images/train/a.png').write_bytes(b'tampered')
+        with self.assertRaisesRegex(ValueError,'Expanded training input was changed'):
+            read_completed_run(directory)
+
     def setUp(self):
         self.previous_uris = mlflow.get_tracking_uri(), mlflow.get_registry_uri()
         self.temporary = tempfile.TemporaryDirectory(prefix="visual analytics tracking-")

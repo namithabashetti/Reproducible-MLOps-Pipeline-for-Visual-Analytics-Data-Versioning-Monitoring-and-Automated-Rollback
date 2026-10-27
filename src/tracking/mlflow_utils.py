@@ -89,10 +89,43 @@ def read_completed_run(directory):
         raise ValueError("Checkpoint hash does not match the evaluation")
     raw = yaml.safe_load((directory / "source/dataset.dvc").read_text())
     lock = yaml.safe_load((directory / "source/dvc.lock").read_text())
-    if (raw["outs"][0]["md5"] != lineage["dataset_dvc_md5"]
-            or lock["stages"]["split"]["outs"][0]["md5"] != lineage["splits_dvc_md5"]
-            or lock["stages"]["preprocess"]["outs"][0]["md5"] != lineage["processed_dvc_md5"]):
+    base_identity = lineage['base_data'] if 'expanded_data' in lineage else lineage
+    if (raw["outs"][0]["md5"] != base_identity["dataset_dvc_md5"]
+            or lock["stages"]["split"]["outs"][0]["md5"] != base_identity["splits_dvc_md5"]
+            or lock["stages"]["preprocess"]["outs"][0]["md5"] != base_identity["processed_dvc_md5"]):
         raise ValueError("DVC snapshot identities disagree with lineage")
+    if 'expanded_data' in lineage:
+        candidate = lineage['expanded_data']
+        relative = Path(candidate['path'])
+        if relative.parent.as_posix() != 'data' or not re.fullmatch(r'expanded-[A-Za-z0-9_-]+',relative.name):
+            raise ValueError("Invalid expanded candidate path")
+        metadata = yaml.safe_load((directory/'source'/relative.with_suffix('.dvc')).read_text())['outs'][0]
+        if (metadata['path'] != relative.name or metadata['md5'] != candidate['dvc_md5']
+                or lineage['dataset_dvc_md5'] != candidate['dvc_md5']
+                or lineage['processed_dvc_md5'] != candidate['dvc_md5']
+                or lineage['splits_dvc_md5'] is not None
+                or file_hash(directory/'inputs/selection.json') != lineage['selection_sha256']):
+            raise ValueError("Expanded dataset identity mismatch")
+        manifest = json.loads((directory/'inputs/manifest.json').read_text())
+        if (file_hash(directory/'inputs/manifest.json') != candidate['manifest_sha256']
+                or file_hash(directory/'inputs/audit.json') != manifest['audit_sha256']):
+            raise ValueError("Expanded provenance mismatch")
+        expected_selection = {s:manifest['selection'][s] for s in ('train','validation')}
+        if lineage['smoke_test']:
+            if any(not set(ids) <= set(expected_selection[s]) for s,ids in selected.items()):
+                raise ValueError("Smoke inputs escaped expanded train/validation membership")
+        elif selected != expected_selection:
+            raise ValueError("Expanded training membership changed")
+        input_hashes = json.loads((directory/'inputs/input-sha256.json').read_text())
+        expected = {f'{kind}/{split}/{name}{suffix}' for split,ids in selected.items() for name in ids
+                    for kind,suffix in (('images','.png'),('labels','.txt'))}
+        if set(input_hashes) != expected:
+            raise ValueError("Incomplete expanded input hashes")
+        for name,digest in input_hashes.items():
+            path = (directory/'inputs'/name).resolve()
+            if not path.is_relative_to(directory/'inputs') or file_hash(path) != digest:
+                raise ValueError("Expanded training input was changed")
+        files += ['inputs/'+name for name in ('manifest.json','audit.json','input-sha256.json','README.dataset.txt','README.roboflow.txt')]
     if "reviewed_data" in lineage:
         candidate = lineage["reviewed_data"]
         relative = Path(candidate["path"])
@@ -126,6 +159,14 @@ def read_completed_run(directory):
             if not path.is_relative_to(directory / "inputs") or file_hash(path) != expected_hash:
                 raise ValueError("Reviewed training input was changed")
         files.append("inputs/input-sha256.json")
+    for receipt_path in sorted((directory/'resumes').glob('*/resume.json')):
+        resume=json.loads(receipt_path.read_text())
+        for relative,digest in resume['sha256'].items():
+            path=(receipt_path.parent/relative).resolve()
+            if not path.is_relative_to(receipt_path.parent.resolve()) or file_hash(path)!=digest:
+                raise ValueError('Resume evidence changed')
+            files.append(path.relative_to(directory).as_posix())
+        files.append(receipt_path.relative_to(directory).as_posix())
     hashes = {name: file_hash(directory / name) for name in sorted(files)}
     digest = hashlib.sha256(json.dumps(hashes, sort_keys=True).encode()).hexdigest()
     return lineage, report, history, values, hashes, digest
@@ -192,6 +233,10 @@ def log_completed_run(project, directory):
     tags["mlflow.source.git.commit"] = lineage["git_commit"]
     if "reviewed_data" in lineage:
         tags.update({"reviewed_data_" + key: str(value) for key, value in lineage["reviewed_data"].items()})
+    if 'expanded_data' in lineage:
+        tags.update({'expanded_data_'+key:str(value) for key,value in lineage['expanded_data'].items()})
+        tags['selection_sha256'] = lineage['selection_sha256']
+        tags['label_status'] = 'source annotations; incomplete visual review'
     tags["mlflow.source.name"] = "src/training/train.py"
     run = existing[0] if existing else client.create_run(experiment_id, tags=tags, run_name=directory.name)
     run_id = run.info.run_id

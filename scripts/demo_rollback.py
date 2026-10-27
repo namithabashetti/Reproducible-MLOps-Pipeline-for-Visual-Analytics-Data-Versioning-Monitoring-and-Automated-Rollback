@@ -192,24 +192,33 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
             stop.set()
             if thread is not None:
                 thread.join()
-            if changed_service:
-                progress('restoring_original', 'Restoring the original experimental API and main deployment receipt.')
-                current = subprocess.run([docker, 'inspect', 'visual-analytics-api'], capture_output=True, text=True)
-                if current.returncode == 0:
-                    current = json.loads(current.stdout)[0]
-                    receipt_path = store / 'artifacts/serving/deployment.json'
-                    known = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
-                    if known is None or current['Id'] != known['container_id']:
-                        raise RuntimeError('API changed outside this demonstration; refusing to remove it')
-                    subprocess.run([docker, 'rm', '-f', current['Id']], check=True, capture_output=True)
-                restored = deploy(ROOT, Path(original_receipt['staged_directory']), original_receipt['model'],
-                                  original_receipt['image_id'], docker)
-                report['original_api_restored'] = restored
-            report['main_registry_aliases_after'] = dict(original_client.get_registered_model(registry['model_name']).aliases)
-            assert report['main_registry_aliases_after'] == original_aliases
-            report['completed_at'] = datetime.now(timezone.utc).isoformat()
-            write_receipt(output / 'result.json', report)
-            progress(report['status'], 'Demonstration ' + report['status'] + '. Original API restored; main model approvals unchanged.')
+            try:
+                if changed_service:
+                    progress('restoring_original', 'Restoring the original experimental API and main deployment receipt.')
+                    current = subprocess.run([docker, 'inspect', 'visual-analytics-api'], capture_output=True, text=True)
+                    if current.returncode == 0:
+                        current = json.loads(current.stdout)[0]
+                        receipt_path = store / 'artifacts/serving/deployment.json'
+                        known = json.loads(receipt_path.read_text()) if receipt_path.exists() else None
+                        if known is None or current['Id'] != known['container_id']:
+                            raise RuntimeError('API changed outside this demonstration; refusing to remove it')
+                        subprocess.run([docker, 'rm', '-f', current['Id']], check=True, capture_output=True)
+                    restored = deploy(ROOT, Path(original_receipt['staged_directory']), original_receipt['model'],
+                                      original_receipt['image_id'], docker)
+                    report['original_api_restored'] = restored
+                report['main_registry_aliases_after'] = dict(original_client.get_registered_model(registry['model_name']).aliases)
+                assert report['main_registry_aliases_after'] == original_aliases
+            except Exception as error:
+                report.update(status='failed', restoration_error=repr(error))
+                raise
+            finally:
+                # Retain a failed receipt even when restoring the normal service fails.
+                report['completed_at'] = datetime.now(timezone.utc).isoformat()
+                write_receipt(output / 'result.json', report)
+                message = ('Normal API restoration failed; inspect result.json before presenting.'
+                           if report.get('restoration_error') else
+                           'Original API restored; main model approvals unchanged.')
+                progress(report['status'], 'Demonstration ' + report['status'] + '. ' + message)
     return report
 
 
