@@ -105,8 +105,9 @@ rollback target.
 
 **Where are data versions?** DVC stores dataset identities and Google Drive is
 the approved private remote. Git stores source/configuration; MLflow stores runs
-and checkpoints. The latest corrected dataset and faculty images are tracked
-locally; remote upload of these new snapshots has not been claimed.
+and checkpoints. The expanded v1, corrected dataset and faculty images were
+uploaded to Google Drive, restored using a separate cache, and verified against
+the original file hashes. See the cloud recovery receipt in the final audit folder.
 
 ## Troubleshooting and evidence
 

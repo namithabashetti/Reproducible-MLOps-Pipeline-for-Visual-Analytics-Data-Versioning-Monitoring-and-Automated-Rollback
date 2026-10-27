@@ -132,8 +132,10 @@ Google Drive supersedes original GCS and the temporary B2 remote by user approva
 Legacy B2 recovery tools remain for historical reproducibility and tests; they are
 not the active default. Credentials stay in secure local configuration and are
 excluded from Git. No keys belong in chat, screenshots or committed files.
-Latest corrected data and faculty image snapshots are locally DVC-tracked;
-remote synchronization of those new snapshots is not yet claimed.
+The expanded v1, corrected protocol and faculty image snapshots were uploaded
+to Google Drive and restored into a separate remote-only cache. Every restored
+file matched its frozen SHA-256. The receipt is
+`reports/final-audit-20261026/drive-delivery/result.json`.
 
 The original data, all completed model checkpoints, training evidence and registry
 history are preserved. Before the current cleanup, source/configuration/docs were

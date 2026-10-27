@@ -1486,3 +1486,17 @@ were moved into reports/final-audit-20261026/retired-guides, and the pre-change
 source/docs ZIP remains available. No original images, model checkpoints or
 historical audit evidence were deleted. The resumed fresh training and queued
 final evaluation are not yet claimed complete.
+
+## 27 October 2026 — repository and cloud delivery
+
+The user authorized final DVC synchronization, restore verification, publication
+and GitHub Actions validation. Google authentication was renewed locally without
+printing credentials. Expanded v1, the corrected grouped protocol and faculty
+images were uploaded to the existing private Drive remote. Recovery used a
+separate remote-only cache and every restored file matched its frozen SHA-256.
+The cloud receipt records all three DVC identities and verification results.
+
+Implementation commit `3e49670` passed GitHub Actions run `40485091957`, including
+111 tests and the CPU Docker build. Final documentation is published separately
+and submitted to the same validation workflow. Deployment stays on model 4; no
+quality approval or stable registry alias is created.

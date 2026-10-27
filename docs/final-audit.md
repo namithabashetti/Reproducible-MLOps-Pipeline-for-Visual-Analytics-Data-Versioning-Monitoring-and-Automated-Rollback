@@ -170,9 +170,12 @@ Do not treat a historical no-drift result as a permanent health statement.
 - Final-test isolation guards passed unit tests. The actual 1,154-image test also
   completed successfully; registry retrieval, data hashes and membership checks passed.
 
-GitHub Actions remains the existing manual workflow on the dedicated Windows
-runner and private repository. Older successful CI runs do not validate these
-latest uncommitted changes. No new remote CI run or publication is claimed.
+Implementation commit `3e49670dadc89da1a1befb11fd3b4431edd15743` was pushed and
+[GitHub Actions run 40485091957](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/40485091957)
+passed all 111 tests, dependency checks, compilation, monitoring checks and the
+CPU Docker build. Deployment was disabled. The documentation handoff is checked
+by the same workflow; its exact commit/run receipt is `github-delivery.json`
+in the local audit directory. Only a successful run matching that commit proves CI passed.
 
 ## H. Cleanup and preservation
 
@@ -194,8 +197,11 @@ them. The active restore default is Google Drive.
    1,154-image final test. The fixed test output refuses repeats/overwrites.
 3. Reviewed: model 5's aggregate and person AP are lower on the shared cohort.
    Model 4 remains the live detector. All five measured results are displayed.
-4. New local DVC snapshots have not been uploaded/restore-verified remotely, and
-   current source changes have not had a new GitHub CI run.
+4. Cloud recovery completed for expanded v1, corrected protocol and faculty
+   images. The isolated cache received its objects only from Google Drive, and
+   every restored path and SHA-256 matched the frozen original. Original local
+   DVC status stayed clean. Receipt: `reports/final-audit-20261026/drive-delivery/result.json`.
+5. Source implementation is pushed and CI passed; see the exact run evidence above.
 
 The original waiting job was
 `reports/final-audit-20261026/finish-evaluation.ps1`; its logs are `queued-evaluation.log`
