@@ -1,0 +1,39 @@
+{
+  "schema": 1,
+  "status": "release_identity_verified",
+  "dataset": "Safety Helmet Detection",
+  "publisher": "Larxel (andrewmvd), Kaggle",
+  "source_url": "https://www.kaggle.com/datasets/andrewmvd/hard-hat-detection",
+  "version": 1,
+  "release_date": "2020-08-11",
+  "publisher_license": "CC0: Public Domain",
+  "raw_content_manifest_sha256": "15b3504dac4555eafbfcfb752ae642a323da03217311c4685f36acaa2c21d401",
+  "verification_date": "2026-10-28",
+  "official_archive": {
+    "source": "https://www.kaggle.com/api/v1/datasets/download/andrewmvd/hard-hat-detection?datasetVersionNumber=1",
+    "files": 10000,
+    "total_bytes": 1320154239,
+    "matched": 10000,
+    "mismatches": [],
+    "central_directory_sha256": "ff6f4014c4c2757f8006c60b64b726486db7a265ce907f2916f7a9acfcebe73e",
+    "method": "Official version-1 ZIP central-directory path, uncompressed length and CRC32; no image payload downloaded"
+  },
+  "image_sha256_verification": {
+    "matched": 5000,
+    "total": 5000,
+    "mirror_repository": "Voxel51/hard-hat-detection",
+    "mirror_revision": "d11e7d6b69ba1a22422db3230c0415d39a699d7c"
+  },
+  "evidence_sha256": {
+    "kaggle-metadata.json": "b15ee8b81418190d9bedcf9880f1ad596a0195b4892e59be150b47dd11f84384",
+    "kaggle-v1-central-directory.bin": "ff6f4014c4c2757f8006c60b64b726486db7a265ce907f2916f7a9acfcebe73e",
+    "kaggle-v1-file-manifest.json": "c71ee6797242a3a25d263f93557b20f5212f042eaaaae7cee90ad50a5e761e14",
+    "original-release-identity.json": "2e600437eff795f9f4bf300989514e904268ae27e208363bf842af8626c05608",
+    "original-image-identity.json": "303ea944a12705b58c4f5003e1ce886d2a3800f66fa177f6ebe81eb3d6deb7ec"
+  },
+  "limitations": [
+    "Identifies the public release matching supplied bytes; the historical download date/account is unknown.",
+    "Publisher license is recorded; upstream ownership of every web image is not independently established.",
+    "Release identity does not establish label completeness."
+  ]
+}

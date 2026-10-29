@@ -9,7 +9,7 @@ import secrets
 import re
 import subprocess
 import sys
-from threading import Lock
+from threading import Lock, Thread
 from uuid import uuid4
 from zipfile import ZipFile, ZIP_DEFLATED
 
@@ -19,6 +19,7 @@ from starlette.concurrency import run_in_threadpool
 from starlette.middleware.trustedhost import TrustedHostMiddleware
 from src.monitoring.dashboard import evidence_metrics, project_status
 import requests
+from src.serving import demo_selection
 
 ROOT = Path(__file__).resolve().parents[2]
 API = 'http://127.0.0.1:8000'
@@ -47,15 +48,20 @@ These selected examples are not an independent accuracy benchmark.
 Person detection and source-label completeness remain limitations.
 
 1. Open http://127.0.0.1:8767/ and choose a test image or upload a PNG.
-2. The normal detector uses trained model 4. Read the active model label.
-3. Select trained model 4 in the rollback panel and start the rollback demo.
-4. The demo tests model 1, then deliberately sets the candidate confidence to 1.0.
-   This suppresses detections. It does not show natural model degradation.
-5. Try the SAME images before, during and after the candidate stage.
-6. The controller measures a separate batch of 250 labeled images. One uploaded
-   image or missed camera frame cannot establish a quality failure.
-7. A qualifying drop restores model 1 and checks real predictions again.
-8. After the test, the normal detector (model 4) is restored.
+2. The main page compares selected demo models; read the actual model label.
+   This selection does not change the deployment or trigger its rollback.
+3. Open /pipeline for the separate protected deployment (source model 4).
+   Automatic protection starts with the application; wait for its active status.
+4. Normal detection uses the candidate's real confidence setting, not a forced fault.
+5. Try the SAME images on the candidate and after a recovery. No image is
+   guaranteed to fail: these files illustrate detections, not an automatic trigger.
+6. The controller measures a separate batch of 250 labeled images every five
+   minutes. One uploaded image or missed camera frame cannot establish accuracy.
+7. A qualifying quality drop or repeated readiness failures restores model 1
+   and verifies real predictions and monitoring without a rollback click.
+8. For a repeatable presentation, Simulate service outage is OPTIONAL: it stops
+   the candidate service. The already-running watcher independently restores the
+   fallback. This proves failure recovery, not natural model-quality degradation.
 
 The copied demo registry calls its candidate version 2. Its trained source is
 model 4 when selected. Existing trained model 2 has not been overwritten.
@@ -64,14 +70,15 @@ The dashboard displays a shared 196-image evaluation with explicit settings.
 Scores from older evaluations with different settings must not be mixed with it.
 Model 4 has the highest shared score; person detection is still imperfect.
 No production quality approval. Fresh protocol training is a separate experiment.
-The new 1,154-image test split is eligible only for fresh protocol training;
-older models trained on some images reassigned to that split.
+The 1,154-image protocol test was already evaluated by model 5. It is not a
+fresh final test for the corrected-label experiment. Older models also trained
+on some images reassigned to that split.
 '''
 
 app = FastAPI(title='Visual analytics live console', docs_url=None, redoc_url=None, openapi_url=None)
 app.add_middleware(TrustedHostMiddleware, allowed_hosts=['127.0.0.1', 'localhost', 'host.docker.internal'])
 lock = Lock()
-job = {'process': None, 'output': None, 'misses': 0, 'candidate_version': '3'}
+job = {'process': None, 'output': None, 'misses': 0, 'candidate_version': '3', 'mode':'quality', 'pid':None}
 JOB_FILE = ROOT / 'reports/live-console-job.json'
 if JOB_FILE.exists():
     try:
@@ -81,8 +88,62 @@ if JOB_FILE.exists():
             job['output'] = ROOT / 'reports' / saved_name
             if saved.get('candidate_version') in ('2', '3', '4'):
                 job['candidate_version'] = saved['candidate_version']
+            job.update(mode=saved.get('mode','quality'),pid=saved.get('pid'))
     except (ValueError, KeyError, TypeError):
         pass
+
+
+def active_job():
+    if job['process'] is not None:
+        return job['process'].poll() is None
+    if job.get('pid') and job['output']:
+        import psutil
+        try:
+            command = psutil.Process(job['pid']).cmdline()
+            return (str(ROOT/'scripts/demo_rollback.py') in command and
+                    str(job['output']) in command and job.get('mode') in command)
+        except (psutil.Error, OSError):
+            pass
+    return False
+
+
+def launch_demo(mode, candidate_version):
+    output = ROOT / 'reports' / ('live-demo-' + uuid4().hex[:12])
+    log = output.with_suffix('.log')
+    log.parent.mkdir(parents=True,exist_ok=True)
+    with log.open('wb') as stream:
+        process = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/demo_rollback.py'),
+            '--output', str(output), '--mode', mode, '--candidate-version', candidate_version],
+            cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
+            creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
+    job.update(process=process,output=output,misses=0,candidate_version=candidate_version,mode=mode,pid=int(process.pid))
+    from src.serving.deploy import write_receipt
+    write_receipt(JOB_FILE, {'directory':output.name,'candidate_version':candidate_version,'mode':mode,'pid':int(process.pid)})
+    return output
+
+
+@app.on_event('startup')
+def start_automatic_protection():
+    """Automatic college-demo protection starts with the application, without a UI click."""
+    with lock:
+        if active_job() or (ROOT/'artifacts/serving/deployment.lock').exists():
+            return
+        if job['output'] and not read_json(job['output']/'result.json'):
+            return  # Preserve an interrupted deployment for inspection.
+        launch_demo('automatic','4')
+
+
+@app.on_event('startup')
+def load_saved_demo_selection():
+    def load():
+        import logging
+        try:
+            saved = read_json(ROOT/'artifacts/serving/demo-selection.json') or {}
+            demo_selection.choose(ROOT, saved.get('demo_model_id','4'), saved.get('generation','historical'),
+                                  saved.get('checkpoint_sha256'))
+        except Exception:
+            logging.exception('Demonstration model could not be loaded; no fallback was substituted')
+    Thread(target=load,name='load-demo-model',daemon=True).start()
 
 
 @app.middleware('http')
@@ -98,6 +159,26 @@ async def local_controls(request, call_next):
     response.headers['X-Content-Type-Options'] = 'nosniff'
     response.headers['X-Frame-Options'] = 'DENY'
     return response
+
+
+
+@app.middleware('http')
+async def demo_request_metrics(request, call_next):
+    if request.method != 'POST' or request.url.path != '/predict':
+        return await call_next(request)
+    from time import perf_counter
+    started,status=perf_counter(),500
+    manifest=demo_selection.selected.get('manifest') or {}
+    labels=(manifest.get('demo_model_id','unselected'),str(manifest.get('model_version','none')))
+    try:
+        response=await call_next(request)
+        status=response.status_code
+        return response
+    finally:
+        labels=getattr(request.state,'demo_identity',labels)
+        outcome='server_error' if status>=500 else 'client_error' if status>=400 else 'success'
+        demo_selection.requests.labels(*labels,outcome).inc()
+        demo_selection.latency.labels(*labels).observe(perf_counter()-started)
 
 
 def call_api(path, **kwargs):
@@ -124,9 +205,46 @@ def home():
     return (Path(__file__).with_name('console.html').read_text(encoding='utf-8')).replace('__CONSOLE_TOKEN__', TOKEN)
 
 
+@app.get('/pipeline', response_class=HTMLResponse)
+def pipeline():
+    return Path(__file__).with_name('pipeline.html').read_text(encoding='utf-8').replace('__CONSOLE_TOKEN__', TOKEN)
+
+
 @app.get('/health')
 def health():
+    return demo_selection.health()
+
+
+@app.get('/deployment/health')
+def deployment_health():
     return call_api('/health')
+
+
+@app.get('/models')
+def available_models():
+    return demo_selection.catalog(ROOT)
+
+
+@app.post('/models/select')
+async def select_model(request: Request):
+    body = bytearray()
+    async for chunk in request.stream():
+        if len(body)+len(chunk)>1024:
+            raise HTTPException(413,'Selection request too large')
+        body.extend(chunk)
+    try:
+        value=json.loads(body)
+        model_id,generation=value['model_id'],value['generation']
+    except (ValueError,KeyError,TypeError):
+        raise HTTPException(400,'Choose a model and model set')
+    try:
+        return await run_in_threadpool(demo_selection.choose,ROOT,model_id,generation)
+    except HTTPException:
+        raise
+    except Exception as error:
+        import logging
+        logging.exception('Demonstration model switch failed')
+        raise HTTPException(422,'Model verification failed; previous selection is unchanged ('+type(error).__name__+')') from error
 
 
 @app.get('/project/status')
@@ -136,7 +254,7 @@ def project_evidence():
 
 @app.get('/metrics')
 def metrics():
-    return Response(evidence_metrics(ROOT),media_type='text/plain; version=0.0.4; charset=utf-8')
+    return Response(evidence_metrics(ROOT)+demo_selection.metrics(),media_type='text/plain; version=0.0.4; charset=utf-8')
 
 
 @app.get('/sample')
@@ -186,7 +304,7 @@ def faculty_pack():
     output = BytesIO()
     with ZipFile(output, 'w', ZIP_DEFLATED) as archive:
         for name in names:
-            archive.writestr(name, (folder / name).read_bytes())
+            archive.writestr(name, SAMPLE_GUIDE if name == 'START-HERE.md' else (folder / name).read_bytes())
     return Response(output.getvalue(), media_type='application/zip',
                     headers={'Content-Disposition': 'attachment; filename="faculty-test-images.zip"'})
 
@@ -194,14 +312,14 @@ def faculty_pack():
 def request_audit():
     output = job['output']
     progress = read_json(output / 'progress.json') if output else None
-    if progress and progress['mode'] == 'quality' and progress['stage'] in ('candidate_live', 'awaiting_quality_check'):
+    if progress and progress['mode'] in ('quality','automatic') and progress['stage'] in ('candidate_live', 'awaiting_quality_check','automatic_monitoring'):
         (output / 'request-audit').touch(exist_ok=True)
         return True
     return False
 
 
-@app.post('/predict')
-async def predict(request: Request):
+@app.post('/deployment/predict')
+async def deployment_predict(request: Request):
     content_type = request.headers.get('content-type', '').split(';')[0]
     if content_type not in ('image/png', 'image/jpeg'):
         raise HTTPException(415, 'Select a PNG or JPEG image')
@@ -225,6 +343,20 @@ async def predict(request: Request):
     return value
 
 
+@app.post('/predict')
+async def predict(request: Request):
+    if request.headers.get('content-type','').split(';')[0].strip() not in ('image/png','image/jpeg'):
+        raise HTTPException(415,'Select a PNG or JPEG image')
+    body=bytearray()
+    async for chunk in request.stream():
+        if len(body)+len(chunk)>MAX_BYTES:
+            raise HTTPException(413,'Image must be under 4 MB')
+        body.extend(chunk)
+    value=await run_in_threadpool(demo_selection.predict,bytes(body))
+    request.state.demo_identity=(value['demo_model_id'],str(value['model_version']))
+    return value
+
+
 @app.post('/demo/start')
 async def start_demo(request: Request):
     body = bytearray()
@@ -243,20 +375,11 @@ async def start_demo(request: Request):
     if candidate_version not in ('2', '3', '4'):
         raise HTTPException(400, 'Choose trained model 2, 3 or 4')
     with lock:
-        if (job['process'] and job['process'].poll() is None) or (ROOT / 'artifacts/serving/deployment.lock').exists():
+        if active_job() or (ROOT / 'artifacts/serving/deployment.lock').exists():
             raise HTTPException(409, 'A deployment/demo is already running; wait for restoration')
         if job['output'] and job['process'] is None and not read_json(job['output'] / 'result.json'):
             raise HTTPException(409, 'Prior demo has no final receipt. Inspect its process and deployment before starting another.')
-        output = ROOT / 'reports' / ('live-demo-' + uuid4().hex[:12])
-        log = output.with_suffix('.log')
-        with log.open('wb') as stream:
-            process = subprocess.Popen([sys.executable, '-u', str(ROOT / 'scripts/demo_rollback.py'),
-                '--output', str(output), '--mode', mode, '--candidate-version', candidate_version],
-                cwd=ROOT, stdout=stream, stderr=subprocess.STDOUT,
-                creationflags=subprocess.CREATE_NO_WINDOW if os.name == 'nt' else 0)
-        job.update(process=process, output=output, misses=0, candidate_version=candidate_version)
-        from src.serving.deploy import write_receipt
-        write_receipt(JOB_FILE, {'directory': output.name, 'candidate_version': candidate_version})
+        output = launch_demo(mode,candidate_version)
     return {'status': 'starting', 'report_directory': str(output)}
 
 
@@ -266,6 +389,16 @@ def audit_now():
         if not request_audit():
             raise HTTPException(409, 'Wait for the quality-demo candidate to become live')
     return {'status': 'audit_requested'}
+
+
+@app.post('/automatic/test-outage')
+def automatic_test_outage():
+    with lock:
+        progress = read_json(job['output']/'progress.json') if job['output'] else None
+        if not active_job() or not progress or progress.get('stage') != 'automatic_monitoring':
+            raise HTTPException(409,'Wait for automatic protection to be active on the candidate')
+        (job['output']/'request-outage').touch(exist_ok=True)
+    return {'status':'test_outage_requested','note':'The watcher decides recovery independently.'}
 
 
 @app.get('/demo/status')
@@ -294,9 +427,18 @@ def demo_status():
         exit_code = None if (ROOT / 'artifacts/serving/deployment.lock').exists() else 1
     if exit_code not in (None, 0):
         progress = {'stage': 'failed', 'message': 'Demo failed. Read the log and check API health; do not claim recovery.'}
-    if process is None and not result:
+    adopted = process is None and active_job()
+    if adopted:
+        exit_code = None
+    if process is None and not result and not adopted:
+        exit_code = 1  # A leftover lock is not evidence of a living watcher.
         progress = {'stage': 'needs_check', 'message': 'Previous test has no final result. Check its process and detector before starting another.'}
+    watch = read_json(output/'watch.json')
+    recovery = read_json(output/'automatic-recovery.json')
+    if progress.get('stage') == 'automatic_recovered':
+        progress = {**progress, 'message':'Automatic recovery completed. The fallback is selected; see live availability above. There is no earlier model for another rollback.'}
     return {'running': exit_code is None, 'exit_code': exit_code, 'progress': progress, 'audit': audit,
+            'automatic':progress.get('mode')=='automatic','watch':watch,'automatic_recovery':recovery,
             'source_versions': result.get('source_versions') if result else ['1', job['candidate_version']],
             'result': {'status': result['status'], 'recovered_map50_95': result.get('recovered_map50_95'),
                        'quality_approval': False, 'original_api_restored': 'original_api_restored' in result} if result else None,

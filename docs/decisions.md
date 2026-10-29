@@ -90,9 +90,14 @@ download version, license file, or preprocessing history was supplied.
 
 The filenames, task, and classes are consistent with
 [Kaggle Safety Helmet Detection](https://www.kaggle.com/datasets/andrewmvd/hard-hat-detection).
-This is a probable source, not verified provenance. Do not invent a download date,
-upstream dataset version, or license claim. Local DVC hashes will establish the
-identity of the files actually used even while upstream provenance is unverified.
+This was initially a probable source. On 28 October 2026, the official version-1
+archive metadata matched all 10,000 local paths, sizes and CRC32 values, and all
+5,000 image SHA256 values matched the pinned mirror and SHEL5K publisher metadata.
+The release identity is now verified and bound to the raw content fingerprint in
+`data/source-provenance.json`; see `docs/research-quality-upgrade.md`.
+The historical download date/account remains unknown. Publisher licensing and
+label completeness are separate from byte identity; neither is inferred from
+filenames alone. Earlier frozen reports retain their original historical status.
 
 The first local DVC snapshot contains 10,000 files and 1,320,154,239 bytes:
 

@@ -2,7 +2,8 @@ dataset:
   raw_path: dataset
   processed_path: data/processed
   annotation_format: pascal_voc_xml
-  provenance_status: unverified
+  provenance_status: release_identity_verified
+  provenance_record: data/source-provenance.json
   classes:
     0: helmet
     1: head

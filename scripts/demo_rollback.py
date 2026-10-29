@@ -27,8 +27,57 @@ from src.serving.deploy import deploy, deployment_lock, stage_model, write_recei
 from src.tracking.mlflow_utils import local_store
 
 
+def automatic_monitor(store, output, docker, batch, batch_sha, baseline, candidate, report, failures, progress):
+    """Keep the real watcher active; fault injection is optional and never the decision."""
+    from src.monitoring.serving_audit import measure, comparison
+    from src.monitoring.rollback import current_container
+    next_audit = 0
+    last_audit = -60
+    while not (output/'stop').exists():
+        if failures:
+            raise RuntimeError('Automatic recovery watcher failed: '+str(failures))
+        current = json.loads((output/'watch.json').read_text())
+        receipt = json.loads((store/'artifacts/serving/deployment.json').read_text())
+        recovered = receipt['model']['model_version'] == baseline['manifest']['model_version']
+        if current['status'] == 'failed':
+            raise RuntimeError('Automatic recovery failed; inspect the saved attempt')
+        if current['status'] == 'recovered':
+            report['rollback'] = current
+            write_receipt(output/'automatic-recovery.json', current)
+        progress('automatic_recovered' if recovered else 'automatic_monitoring',
+                 'Fallback model is serving after automatic recovery.' if recovered else
+                 'Automatic protection is active. Readiness checks run continuously; labeled quality checks run every five minutes.')
+        if not recovered and (output/'request-outage').exists():
+            (output/'request-outage').unlink()
+            current_container(docker, receipt)
+            write_receipt(output/'injected-outage.json', {'at':datetime.now(timezone.utc).isoformat(),
+                          'container_id':receipt['container_id'],'scope':'Explicit optional failure simulation'})
+            subprocess.run([docker,'stop','--time','5',receipt['container_id']],check=True,capture_output=True)
+            next_audit = time.monotonic()+90
+        requested = (output/'request-audit').exists()
+        if not recovered and (time.monotonic() >= next_audit or (requested and time.monotonic()-last_audit >= 60)):
+            if requested:
+                (output/'request-audit').unlink()
+            audit_folder = output/'scheduled-audits'/str(time.time_ns())
+            audit_folder.mkdir(parents=True)
+            try:
+                scores = measure(batch, receipt['model'], audit_folder/'predictions.json')
+                audit = comparison(store,batch_sha,baseline,scores)
+                audit['limitations'] = 'Fixed labeled replay; incomplete source labels; not live-camera ground truth or production approval.'
+                write_receipt(output/'audit.json',audit)
+                write_receipt(audit_folder/'audit.json',audit)
+            except (requests.RequestException, ValueError) as error:
+                write_receipt(audit_folder/'error.json',{'error':type(error).__name__,
+                              'note':'Audit unavailable; readiness recovery remains active.'})
+            next_audit = time.monotonic()+300
+            last_audit = time.monotonic()
+        time.sleep(5)
+    report['status'] = 'stopped'
+    return report
+
+
 def demonstrate(output, docker, mode='outage', predecessor_version='1', candidate_version='3'):
-    if mode not in ('outage', 'quality'):
+    if mode not in ('outage', 'quality', 'automatic'):
         raise ValueError('Unknown demonstration mode')
     output = output.resolve()
     if not output.is_relative_to(ROOT / 'reports') or output == ROOT / 'reports':
@@ -78,6 +127,7 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
               'quality_approval': False, 'main_registry_aliases_before': original_aliases,
               'source_versions': [predecessor_version, candidate_version], 'demo_model_name': name, 'status': 'running', 'mode': mode,
               'source_commit': subprocess.check_output(['git', 'rev-parse', 'HEAD'], cwd=ROOT, text=True).strip()}
+    write_receipt(output/'session.json',report)
     stop, failures = Event(), []
     thread = None
     changed_service = False
@@ -92,17 +142,18 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
             with deployment_lock(store):
                 predecessor = deploy(store, staged, manifest, original_receipt['image_id'], docker)
             report['predecessor'] = predecessor
-            if mode == 'quality':
+            if mode in ('quality', 'automatic'):
                 from src.monitoring.serving_audit import prepare_batch, measure, comparison
                 progress('baseline_audit', 'Measuring predecessor detections on 250 existing labeled monitoring images.')
                 batch, batch_sha = prepare_batch(ROOT, output)
                 baseline = measure(batch, predecessor['model'], output / 'baseline-predictions.json')
                 # Deliberate configuration fault, recorded in the deployed manifest.
                 # No fake predictions, edited weights, altered labels or main-policy changes.
-                config['serving']['confidence'] = 1.0
-                (store / 'configs/config.yaml').write_text(yaml.safe_dump(config, sort_keys=False))
-                report['controlled_fault'] = {'kind': 'confidence_threshold', 'value': 1.0,
-                    'note': 'Explicit configuration-fault demonstration, not natural model degradation'}
+                if mode == 'quality':
+                    config['serving']['confidence'] = 1.0
+                    (store / 'configs/config.yaml').write_text(yaml.safe_dump(config, sort_keys=False))
+                    report['controlled_fault'] = {'kind': 'confidence_threshold', 'value': 1.0,
+                        'note': 'Explicit configuration-fault demonstration, not natural model degradation'}
             progress('candidate', 'Deploying candidate and capturing the real predecessor rollback target.')
             staged, manifest = stage_model(store if mode == 'quality' else ROOT, store, versions[1].version, experimental=True)
             with deployment_lock(store):
@@ -115,14 +166,17 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
             state = json.loads(subprocess.check_output([docker, 'inspect', candidate['container_id']], text=True))[0]
             started = datetime.fromisoformat(state['State']['StartedAt'].replace('Z', '+00:00')).timestamp()
             progress('candidate_live', 'Candidate is live. Quality mode intentionally uses confidence 1.0. Waiting for startup grace.' if mode == 'quality'
-                     else 'Waiting for the configured startup grace period before the fault test.')
+                     else ('Candidate is live with normal settings. Waiting for startup grace before automatic protection.' if mode == 'automatic'
+                           else 'Waiting for the configured startup grace period before the fault test.'))
             while time.time() < started + config['health']['startup_grace_seconds'] + 1:
                 time.sleep(1)
             def controller():
                 try:
                     watch(store, docker, output / 'watch.json', 10, stop=stop,
-                          audit=output / 'audit.json' if mode == 'quality' else None)
+                          audit=output / 'audit.json' if mode in ('quality', 'automatic') else None)
                 except Exception as error:
+                    import traceback
+                    (output/'watcher-error.txt').write_text(traceback.format_exc())
                     failures.append(repr(error))
             thread = Thread(target=controller, name='rollback-demo-watch')
             thread.start()
@@ -135,6 +189,9 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
             assert initial['status'] == 'observe', initial
             assert initial['health']['signals']['readiness']['status'] == 'healthy'
             report['healthy_watch_check'] = initial
+            if mode == 'automatic':
+                return automatic_monitor(store,output,docker,batch,batch_sha,baseline,candidate,
+                                         report,failures,progress)
             if mode == 'quality':
                 progress('awaiting_quality_check', 'Live detections are visible. Camera misses request an audit; a scheduled audit also starts within 30 seconds.')
                 deadline = time.monotonic() + 30
@@ -225,7 +282,7 @@ def demonstrate(output, docker, mode='outage', predecessor_version='1', candidat
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(description=__doc__)
     parser.add_argument('--output', type=Path, required=True)
-    parser.add_argument('--mode', choices=('outage', 'quality'), default='outage')
+    parser.add_argument('--mode', choices=('outage', 'quality', 'automatic'), default='outage')
     parser.add_argument('--predecessor-version', default='1', help='Existing source version designated as demo predecessor')
     parser.add_argument('--candidate-version', default='3', help='Existing source candidate version; never a production promotion')
     parser.add_argument('--docker', default=str(Path(os.environ['LOCALAPPDATA']) / 'Programs/DockerDesktop/resources/bin/docker.exe'))

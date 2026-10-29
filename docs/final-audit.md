@@ -1,4 +1,36 @@
+**Latest execution snapshot:** See [PROJECT_EXECUTION_REPORT.md](../PROJECT_EXECUTION_REPORT.md)
+for the five-model retraining queue and 29 October restart. Older sections below
+refer to the previous five experiments, not the new retraining jobs.
+
 # Final project audit — 27 October 2026
+
+**28 October follow-up:** Original dataset release identity is now verified:
+10,000 local files match official Kaggle version-1 archive metadata, and all 5,000
+images match publisher SHA256 values. SHEL5K v4's 5,000 replacement XML files pass
+hash, geometry and class checks, supplying 20,023 person boxes versus the raw
+dataset's 751. This is label-source improvement, not a measured accuracy gain.
+The separate corrected-label dataset is prepared and its Google Drive restore
+verified all 15,394 files. New 30-epoch training was authorized on 28 October;
+its measured quality comparison is pending. Existing model 4 is the automatic
+session candidate, with model 1 as the scoped fallback after recovery.
+See [research-quality-upgrade.md](research-quality-upgrade.md) for evidence,
+license attribution, changed helmet-box convention and the frozen experiment.
+
+The console now starts continuous protection without a rollback-start click.
+The normal-settings source-model-4 replay measured AP50–95 0.420614 versus the
+source-model-1 baseline 0.420860, below the 0.05 regression trigger. These are
+HTTP replay scores with old source labels, not the corrected-label research
+scores. Session `reports/live-demo-fbd9e2316693` records the current watcher.
+An earlier outage recovered successfully but its continuing watcher later failed
+with a Windows permission error (`live-demo-cb0c40b47e48`). Atomic receipt writes
+now retry transient sharing violations, and regression tests cover preserving
+the recovered fallback when no earlier target exists. The later explicitly requested
+controlled outage passed: three readiness checks, 20 predictions and Prometheus
+identity checks succeeded. The saved watcher receipt advanced more than 22 minutes
+after recovery, retaining the fallback without a second rollback target. Evidence:
+`reports/quality-upgrade-20261027/automatic-recovery-verified.json`. Project processes
+and Docker were subsequently found stopped; the original deployment was verified
+and restored on 29 October. This does not establish model-quality approval.
 
 The **college demonstration works**: real image inference, Docker deployment,
 monitoring, data/model identities and automatic rollback are verified. The fresh
@@ -7,7 +39,7 @@ shared comparison and reserved final test also completed. Model 4 remains live
 because model 5 scored lower on shared validation. This is **not full production or three-class
 quality acceptance**. No main stable alias has been approved.
 
-Use [faculty-demo.md](faculty-demo.md) for the presentation and restart commands.
+Use [PROJECT_GUIDE.md](../PROJECT_GUIDE.md) for the presentation and restart commands.
 This report supersedes older completion summaries. Historical reports are retained
 as evidence of their own runs, not proof of current service availability.
 
@@ -49,7 +81,8 @@ Additional source: supplied Construction Site Safety Roboflow export v28,
 2,801 images before exclusions, 108 excluded, 2,693 retained. It contains
 augmentation variants, not 2,693 independently verified new scenes. Supplied
 README states CC BY 4.0; upstream rights were not independently verified.
-Original Kaggle URL/version remains unknown. Label completeness remains limited.
+Original Kaggle release identity was verified on 28 October; see the follow-up
+above. Historical model inputs still have incomplete labels.
 
 ## C. Actual completed models
 
@@ -216,6 +249,6 @@ deployment or approval changed. Do not rerun or overwrite these evaluation outpu
 The working college demo is available now at http://127.0.0.1:8767/.
 The newer training experiment, shared comparison and reserved final test are complete.
 Production/model-quality acceptance remains withheld because of label quality,
-person-detection limitations, original-source provenance and missing stable
+person-detection limitations, incomplete upstream image-rights history and missing stable
 approval. These are explicit limitations, not silently waived requirements.
 Google Drive remains the user-approved remote; no paid transfer was performed.

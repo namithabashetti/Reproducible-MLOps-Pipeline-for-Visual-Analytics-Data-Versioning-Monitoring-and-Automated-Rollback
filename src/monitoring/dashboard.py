@@ -18,9 +18,27 @@ def read_json(path):
 
 def history(project):
     rows = []
+    for path in (project/'reports').glob('live-demo-*/automatic-recovery.json'):
+        result = read_json(path)
+        finished = read_json(path.parent/'result.json') or {}
+        session = read_json(path.parent/'session.json') or finished
+        if not result or result.get('status') != 'recovered':
+            continue
+        sources = session.get('source_versions',[])
+        rows.append({'report':path.parent.name,
+                     'status':'recovered; session '+finished['status'] if finished else 'recovered',
+                     'mode':'automatic',
+                     'controlled_demo':True,'previous_model':sources[1] if len(sources)==2 else None,
+                     'recovery_model':sources[0] if sources else None,
+                     'normal_model':finished.get('original_api_restored',{}).get('model',{}).get('model_version')
+                                    if finished else (sources[0] if sources else None),
+                     'reason':', '.join(result.get('decision',{}).get('reasons',[])),
+                     'completed_at':result.get('completed_at')})
     for path in sorted((project/'reports').glob('live-demo-*/result.json'),key=lambda p:p.stat().st_mtime,reverse=True)[:12]:
         result = read_json(path)
         if not result: continue
+        if result.get('mode') == 'automatic' and (path.parent/'automatic-recovery.json').exists():
+            continue
         sources = result.get('source_versions',[])
         rollback = result.get('rollback',{})
         rows.append({'report':path.parent.name, 'status':result.get('status','unknown'),
@@ -30,7 +48,7 @@ def history(project):
             'reason':', '.join(rollback.get('decision',{}).get('reasons',[])) or result.get('error','Unavailable'),
             'completed_at':result.get('completed_at'),
             'normal_model':result.get('original_api_restored',{}).get('model',{}).get('model_version')})
-    return rows
+    return sorted(rows,key=lambda row:row.get('completed_at') or '',reverse=True)[:12]
 
 
 def recorded_summary(project):
@@ -81,9 +99,39 @@ def recorded_summary(project):
     return summary
 
 
+def training_queue_status(project):
+    state=read_json(project/'artifacts/training/five-model-queue/status.json')
+    if not state:
+        return None
+    import psutil
+    identity=state.get('runner',{})
+    try:
+        process=psutil.Process(identity['pid'])
+        state['runner_alive']=(abs(process.create_time()-identity['created'])<.01 and process.cmdline()==identity['command'])
+    except (psutil.Error,KeyError):
+        state['runner_alive']=False
+    for job in state['jobs']:
+        directory=project/'artifacts/training'/job['run']
+        try:
+            with (directory/'fit/results.csv').open(newline='') as stream:
+                rows=list(csv.DictReader(stream))
+            job['epochs_completed']=int(rows[-1]['epoch']) if rows else 0
+        except (OSError,ValueError,KeyError):
+            pass
+        job['validation']=read_json(directory/'metrics.json')
+        job['test']=read_json(directory/'final-evaluation/test/complete.json')
+        if job['status']=='running' and not state['runner_alive']:
+            job['status']='Runner unavailable; inspect saved process before resuming'
+    return state
+
+
 def project_status(project):
     summary = recorded_summary(project)
     directory = project/'artifacts/training/protocol-v2-30e'
+    research = project/'artifacts/training/shel5k-v1-30e'
+    corrected_labels = (research/'lineage.json').exists()
+    if corrected_labels:
+        directory = research
     lineage = read_json(directory/'lineage.json')
     training = None
     if lineage:
@@ -98,12 +146,18 @@ def project_status(project):
         except (OSError, ValueError, KeyError, IndexError):
             training = {'run':directory.name, 'epochs_recorded':None, 'epochs_requested':lineage['epochs_requested'],
                         'last_recorded_at':None, 'registered':False}
-        comparison=read_json(project/'reports/final-audit-20261026/comparison-with-protocol/comparison.json')
+        comparison=read_json(project/('reports/quality-upgrade-20261027/candidate-comparison/comparison.json'
+                                     if corrected_labels else
+                                     'reports/final-audit-20261026/comparison-with-protocol/comparison.json'))
         final_test=read_json(directory/'final-test/metrics.json')
         training['comparison_complete']=bool(comparison and comparison.get('status')=='completed')
         training['final_test_complete']=bool(final_test and final_test.get('evaluation_split')=='test'
                                            and final_test.get('production_approval') is False)
-    return {'evidence':summary, 'history':history(project),
+        training['experiment'] = 'Corrected-label research experiment' if corrected_labels else 'Grouped split experiment'
+        training['final_test_required'] = not corrected_labels
+        training['note'] = ('Development validation only; the protocol test was already used by model 5. '
+                            'Scores with these new labels must be kept separate from the table below.' if corrected_labels else '')
+    return {'evidence':summary, 'history':history(project), 'training_queue':training_queue_status(project),
             'training':training,
             'production_approval':False,
             'note':'Recorded validation results, not live accuracy. No quality-approved stable model is assigned.'}

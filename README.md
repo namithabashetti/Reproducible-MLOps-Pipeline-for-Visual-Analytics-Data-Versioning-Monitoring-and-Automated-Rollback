@@ -1,12 +1,15 @@
-# Reproducible MLOps Pipeline for Visual Analytics, Data Versioning and Automated Rollback
+# Reproducible MLOps Pipeline for Visual Analytics: Data Versioning, Monitoring, and Automated Rollback
 
 A local construction-safety demonstration: image/camera detection with YOLOv8n,
 DVC data versions, MLflow experiments and registry, Docker/FastAPI serving,
 Prometheus/Grafana monitoring, Evidently drift evidence and verified automatic rollback.
 
 **College demonstration, not production quality acceptance.** Person detection and
-source-label completeness remain limitations. The original dataset URL/version is
-unverified. No main-registry stable model is approved. Controlled demonstrations
+source-label completeness remain limitations. The original dataset release is now
+verified against public publisher metadata. The separate SHEL5K label upgrade is
+prepared and backed up to Google Drive; all five corrected-label training runs and research evaluations are complete.
+See [research quality upgrade](docs/research-quality-upgrade.md).
+No main-registry stable model is approved. Controlled demonstrations
 use a separate registry and deliberate faults; no fake detections or metrics.
 
 ## Run the existing laptop installation
@@ -19,16 +22,28 @@ Set-Location -LiteralPath 'F:\major project implementation'
 ```
 
 Open [the main console](http://127.0.0.1:8767/). It includes detection, named test
-images, model/data comparisons and automatic rollback controls. The start script
-uses the saved API container; it does not train, download data or upload to storage.
+images and a verified demonstration model selector. Detailed evidence and automatic protection are at `/pipeline`. On startup, the console
+prepares an isolated recovery session with trained model 4 and a model 1 fallback.
+No rollback-start button is required. Readiness failures or a verified labeled
+quality drop can trigger recovery; a single missed camera object cannot establish
+an accuracy failure. The optional outage button only simulates a service failure.
+The start script does not train, download data or upload to storage.
 
-- [Faculty demonstration guide](docs/faculty-demo.md): exact sequence and answers.
-- [Current audit and remaining work](docs/final-audit.md): verified evidence and gaps.
+- [Complete beginner and demonstration guide](PROJECT_GUIDE.md): exact sequence and answers.
+- [Final execution report](PROJECT_EXECUTION_REPORT.md): all five results, verified features and remaining limitations.
+- [Historical audit](docs/final-audit.md): earlier evidence and decisions.
 - [Additional dataset and experiments](docs/additional-data.md): provenance and splits.
 - [Annotation policy](docs/annotation-policy.md): what label review does and does not prove.
 - [Decision history](docs/decisions.md): earlier approvals and phase records.
 
 ## Current data and models
+
+The five-model corrected-label retraining queue completed 30, 30, 30, 60 and 70
+epochs on the same 5,385/1,154/1,154 split. Inspect it with
+`.\.venv\Scripts\python.exe scripts/train_all_models.py status`.
+The main page separates historical Models 1–5 from newly registered retrained
+versions. Selecting a demo model does not change Docker deployment, stable aliases
+or the captured rollback target. See `PROJECT_GUIDE.md` for the complete workflow.
 
 | Dataset / protocol | Train | Validation | Test | Other |
 |---|---:|---:|---:|---|
@@ -140,6 +155,6 @@ file matched its frozen SHA-256. The receipt is
 The original data, all completed model checkpoints, training evidence and registry
 history are preserved. Before the current cleanup, source/configuration/docs were
 saved in `reports/final-audit-20261026/before-changes.zip`, with hashes and a Git diff.
-Old presentation guides were consolidated into `docs/faculty-demo.md` and kept in
+Old presentation guides are now consolidated into `PROJECT_GUIDE.md` and kept in
 the recoverable local cleanup archive. Historical scores remain in their original
 reports and should be cited with their specific evaluation protocol.

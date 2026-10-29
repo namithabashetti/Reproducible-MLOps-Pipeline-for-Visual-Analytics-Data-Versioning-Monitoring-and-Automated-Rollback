@@ -42,7 +42,7 @@ def read_annotation(path, image_size, class_names):
     return objects
 
 
-def validate_dataset(raw_path, class_names):
+def validate_dataset(raw_path, class_names, provenance=None):
     """Decode all images, validate paired labels, and fingerprint every raw file."""
     raw_path = Path(raw_path)
     for folder in ("images", "annotations"):
@@ -94,6 +94,14 @@ def validate_dataset(raw_path, class_names):
                 fingerprints[relative] = sha256(path.read_bytes()).hexdigest()
     # Include relative paths as well as bytes, so a rename changes dataset identity.
     manifest = "".join(f"{name}\0{digest}\n" for name, digest in sorted(fingerprints.items()))
+    manifest_sha256 = sha256(manifest.encode()).hexdigest()
+    provenance_status = "unverified"
+    if provenance is not None:
+        if provenance.get("raw_content_manifest_sha256") != manifest_sha256:
+            raise ValueError("Dataset bytes no longer match the recorded provenance")
+        if provenance.get("status") != "release_identity_verified":
+            raise ValueError("Unsupported provenance status")
+        provenance_status = provenance["status"]
     return {
         "images": len(images), "annotations": len(annotations),
         "files": len(fingerprints), "total_bytes": total_bytes,
@@ -103,8 +111,8 @@ def validate_dataset(raw_path, class_names):
         "boxes_with_side_under_16_pixels": small_boxes,
         "boxes_touching_zero": zero_origin_boxes,
         "exact_pixel_duplicate_groups": [names for names in duplicates.values() if len(names) > 1],
-        "content_manifest_sha256": sha256(manifest.encode()).hexdigest(),
-        "provenance_status": "unverified",
+        "content_manifest_sha256": manifest_sha256,
+        "provenance_status": provenance_status,
         "limitations": ["Near-duplicates and scene groups are not checked.",
                         "Structural validity does not establish annotation completeness."],
     }
@@ -121,7 +129,10 @@ def main():
     if args.report and args.report.resolve().is_relative_to(raw_path):
         parser.error("Report output must be outside the original dataset")
     try:
-        result = validate_dataset(raw_path, set(config["classes"].values()))
+        provenance = None
+        if config.get("provenance_record"):
+            provenance = json.loads((project / config["provenance_record"]).read_text())
+        result = validate_dataset(raw_path, set(config["classes"].values()), provenance)
     except (ValueError, OSError, ET.ParseError) as exc:
         parser.exit(1, f"Dataset validation failed: {exc}\n")
     output = json.dumps(result, indent=2, sort_keys=True) + "\n"

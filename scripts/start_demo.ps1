@@ -5,6 +5,13 @@ Set-Location -LiteralPath $projectRoot
 $pythonExe = Join-Path $projectRoot '.venv\Scripts\python.exe'
 $dockerExe = Join-Path $env:LOCALAPPDATA 'Programs\DockerDesktop\resources\bin\docker.exe'
 if (Test-Path -LiteralPath 'artifacts/serving/deployment.lock') {
+    try {
+        $automaticState = Invoke-RestMethod 'http://127.0.0.1:8767/demo/status' -TimeoutSec 5
+        if ($automaticState.running -and $automaticState.automatic) {
+            Write-Host 'Automatic protection is already running. Main page: http://127.0.0.1:8767/'
+            return
+        }
+    } catch {}
     throw 'A deployment lock exists. Finish the active demo or inspect the interrupted deployment before restarting.'
 }
 $engineReady = $false

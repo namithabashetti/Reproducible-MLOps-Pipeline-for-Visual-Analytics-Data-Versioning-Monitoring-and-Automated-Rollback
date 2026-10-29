@@ -2,7 +2,7 @@
   "uid": "visual-analytics-operations",
   "title": "Visual analytics \u2014 Operations",
   "schemaVersion": 41,
-  "version": 4,
+  "version": 5,
   "editable": false,
   "tags": [
     "visual-analytics",
@@ -987,6 +987,209 @@
       },
       "options": {
         "showHeader": true
+      }
+    },
+    {
+      "id": 21,
+      "title": "Selected demonstration model (separate from deployment)",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 67,
+        "w": 12,
+        "h": 6
+      },
+      "description": "Local demonstration service only. These metrics do not describe the separate Docker deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_demo_active_model == 1",
+          "legendFormat": "Model {{model_id}} \u00b7 version {{version}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 22,
+      "title": "Demonstration requests and errors",
+      "type": "table",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 67,
+        "w": 12,
+        "h": 6
+      },
+      "description": "Local demonstration service only. These metrics do not describe the separate Docker deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "va_demo_requests_total",
+          "legendFormat": "Model {{model_id}} \u00b7 version {{version}}",
+          "instant": true,
+          "range": false,
+          "format": "table"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      },
+      "transformations": [
+        {
+          "id": "labelsToFields",
+          "options": {
+            "mode": "columns"
+          }
+        },
+        {
+          "id": "organize",
+          "options": {
+            "excludeByName": {
+              "Time": true,
+              "__name__": true,
+              "instance": true,
+              "job": true
+            },
+            "renameByName": {
+              "Value": "Requests",
+              "va_demo_requests_total": "Requests"
+            }
+          }
+        }
+      ]
+    },
+    {
+      "id": 23,
+      "title": "Demonstration response time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 0,
+        "y": 73,
+        "w": 12,
+        "h": 6
+      },
+      "description": "Local demonstration service only. These metrics do not describe the separate Docker deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_id,version) (rate(va_demo_request_seconds_sum[2m])) / (sum by(model_id,version) (rate(va_demo_request_seconds_count[2m])) > 0)",
+          "legendFormat": "Model {{model_id}} \u00b7 version {{version}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
+      }
+    },
+    {
+      "id": 24,
+      "title": "Demonstration inference time",
+      "type": "timeseries",
+      "datasource": {
+        "type": "prometheus",
+        "uid": "visual-analytics-prometheus"
+      },
+      "gridPos": {
+        "x": 12,
+        "y": 73,
+        "w": 12,
+        "h": 6
+      },
+      "description": "Local demonstration service only. These metrics do not describe the separate Docker deployment.",
+      "targets": [
+        {
+          "refId": "A",
+          "expr": "sum by(model_id,version) (rate(va_demo_inference_seconds_sum[2m])) / (sum by(model_id,version) (rate(va_demo_inference_seconds_count[2m])) > 0)",
+          "legendFormat": "Model {{model_id}} \u00b7 version {{version}}",
+          "instant": false,
+          "range": true,
+          "format": "time_series"
+        }
+      ],
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "noValue": "Unavailable",
+          "color": {
+            "mode": "palette-classic"
+          }
+        },
+        "overrides": []
+      },
+      "options": {
+        "legend": {
+          "displayMode": "list",
+          "placement": "bottom"
+        },
+        "tooltip": {
+          "mode": "single"
+        }
       }
     }
   ],

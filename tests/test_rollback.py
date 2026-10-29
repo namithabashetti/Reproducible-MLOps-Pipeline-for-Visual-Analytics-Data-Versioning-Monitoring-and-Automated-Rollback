@@ -17,10 +17,30 @@ import yaml
 
 from src.monitoring.health import evaluate, iso, model_identity
 from src.monitoring.rollback import prepare_target, recovery_images, run, validate_decision, verify_recovery, watch
-from src.serving.deploy import deploy, deployment_lock, snapshot_target, stage_model
+from src.serving.deploy import deploy, deployment_lock, snapshot_target, stage_model, write_receipt
 
 
 class RollbackTests(unittest.TestCase):
+    def test_atomic_receipt_retries_temporary_windows_reader_lock(self):
+        import os
+        path=self.root/'receipt.json';path.write_text('{"version":1}')
+        replace=os.replace
+        attempts=[]
+        def sharing_violation(source,destination):
+            attempts.append(1)
+            if len(attempts)==1:
+                self.assertEqual(json.loads(path.read_text()),{'version':1})
+                raise PermissionError('reader has file open')
+            replace(source,destination)
+        with patch('src.serving.deploy.os.replace',side_effect=sharing_violation),patch('src.serving.deploy.time.sleep'):
+            write_receipt(path,{'version':2})
+        self.assertEqual(json.loads(path.read_text()),{'version':2})
+        self.assertEqual(len(attempts),2)
+        with patch('src.serving.deploy.os.replace',side_effect=PermissionError('persistent lock')),patch('src.serving.deploy.time.sleep'):
+            with self.assertRaises(PermissionError):
+                write_receipt(path,{'version':3})
+        self.assertEqual(json.loads(path.read_text()),{'version':2})
+
     def test_watch_refreshes_evidence_and_stops_cooperatively(self):
         stop = MagicMock()
         stop.is_set.side_effect = [False, False, True]

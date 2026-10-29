@@ -117,7 +117,16 @@ def write_receipt(path, value):
         stream.write("\n")
         stream.flush()
         os.fsync(stream.fileno())
-    os.replace(temporary, path)
+    # Windows readers may briefly hold the destination without delete sharing.
+    # Retain atomic replacement; a bounded retry must not publish partial JSON.
+    for attempt in range(10):
+        try:
+            os.replace(temporary, path)
+            break
+        except PermissionError:
+            if attempt == 9:
+                raise
+            time.sleep(.02 * (attempt + 1))
 
 
 def snapshot_target(project, store_project, old, docker):

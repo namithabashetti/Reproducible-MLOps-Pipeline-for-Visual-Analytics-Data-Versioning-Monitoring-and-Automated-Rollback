@@ -11,10 +11,64 @@ import yaml
 import numpy as np
 
 from src.training.train import prepare_data, resume_run
-from src.training.evaluate import evaluate, validation_cohorts, protocol_test_membership
+from src.training.evaluate import evaluate, validation_cohorts, protocol_test_membership, compare_research_labels, research_selection
 
 
 class TrainingTests(unittest.TestCase):
+    def test_research_selection_requires_person_gain_and_checks_regressions(self):
+        def result(person, helmet=.5, head=.5):
+            return {'metrics':{'map50_95':(person+helmet+head)/3},
+                    'per_class':[{'Class':name,'mAP50-95':value}
+                                 for name,value in [('helmet',helmet),('head',head),('person',person)]]}
+        models={'model_5':{'validation':{'combined':result(.2)}},
+                'model_4':{'validation':{'shared196':result(.3)}},
+                'candidate':{'validation':{'combined':result(.25),'shared196':result(.31)}}}
+        self.assertTrue(research_selection(models)['research_target_met'])
+        self.assertFalse(research_selection(models)['automatic_deployment'])
+        models['candidate']['validation']['combined']=result(.249)
+        self.assertFalse(research_selection(models)['research_target_met'])
+        models['candidate']['validation']['combined']=result(.4,helmet=.47)
+        self.assertFalse(research_selection(models)['research_target_met'])
+
+    def test_research_comparison_preserves_shared_cohort_and_rejects_train_overlap(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root = Path(temporary)
+            source = root/'data/expanded-shel5k-fixture'
+            source.mkdir(parents=True)
+            selection = {'train':['train'], 'validation':['original','added']}
+            manifest = {'selection':{**selection,'test':['reserved']},'source_images':{'added':{}}}
+            (source/'selection.json').write_text(json.dumps(selection))
+            (source/'manifest.json').write_text(json.dumps(manifest))
+            hashes = {}
+            for kind,suffix in [('images','.png'),('labels','.txt')]:
+                for name in selection['validation']:
+                    p=source/kind/'validation'/(name+suffix)
+                    p.parent.mkdir(parents=True,exist_ok=True)
+                    p.write_bytes(b'fixture only')
+                    hashes[p.relative_to(source).as_posix()]=hashlib.sha256(p.read_bytes()).hexdigest()
+            (source/'input-sha256.json').write_text(json.dumps(hashes))
+            for name in ('protocol-v2-30e','expanded-css-v1-60e'):
+                run=root/'artifacts/training'/name
+                (run/'inputs').mkdir(parents=True)
+                (run/'fit/weights').mkdir(parents=True)
+                (run/'inputs/selection.json').write_text(json.dumps(selection))
+                (run/'fit/weights/best.pt').write_bytes(b'fixture checkpoint')
+            result={'metrics':{'map50_95':.2},'per_class':[]}
+            with patch('src.tracking.mlflow_utils.read_completed_run'), patch('src.training.evaluate.evaluate',return_value=result):
+                report=compare_research_labels(root,source,root/'evaluation')
+                self.assertEqual(set(report['models']['model_4']['validation']),{'shared196'})
+                self.assertEqual(set(report['models']['model_5']['validation']),{'combined','original','additional'})
+                self.assertFalse(any('reserved' in p.name for p in (root/'evaluation/inputs').rglob('*')))
+                run=root/'artifacts/training/protocol-v2-30e'
+                (run/'inputs/manifest.json').write_text('{"different":"labels"}')
+                with self.assertRaisesRegex(ValueError,'different label version'):
+                    compare_research_labels(root,source,root/'wrong-labels',run)
+                self.assertFalse((root/'wrong-labels').exists())
+                (run/'inputs/selection.json').write_text(json.dumps({**selection,'train':['original']}))
+                with self.assertRaisesRegex(ValueError,'trained on'):
+                    compare_research_labels(root,source,root/'rejected')
+                self.assertFalse((root/'rejected').exists())
+
     def test_resume_refuses_finished_runs_and_changed_input_coverage(self):
         with tempfile.TemporaryDirectory() as temporary:
             project=Path(temporary);run=project/'artifacts/training/interrupted'
@@ -37,6 +91,8 @@ class TrainingTests(unittest.TestCase):
         manifest={'protocol':'grouped-70-15-15-v1','selection':{**selected,'test':['d','e']},
                   'related_groups':[['a','b'],['d','e']]}
         self.assertEqual(protocol_test_membership(manifest,selected),['d','e'])
+        with self.assertRaisesRegex(ValueError, 'already consumed'):
+            protocol_test_membership({**manifest, 'final_test_status': 'previously_consumed_by_model_5'}, selected)
         for mutation in ('old', 'overlap', 'related'):
             changed=json.loads(json.dumps(manifest))
             if mutation=='old': changed.pop('protocol')
@@ -79,6 +135,17 @@ class TrainingTests(unittest.TestCase):
             self.assertEqual(counts,{'train':3,'validation':3})
             self.assertEqual({p.name for p in (output/'images').iterdir()},{'train','validation'})
             self.assertFalse(any('/test/' in key for key in json.loads((output/'input-sha256.json').read_text())))
+            annotation = source/'annotation-provenance.json'
+            annotation.write_text('{"source":"publisher fixture"}')
+            (source/'manifest.json').write_text(json.dumps({'selection':selected, 'label_upgrade':{
+                'audit_sha256':hashlib.sha256(annotation.read_bytes()).hexdigest()}}))
+            prepare_data(root, root/'publisher-staged', False, expanded_data=source)
+            self.assertEqual((root/'publisher-staged/annotation-provenance.json').read_bytes(), annotation.read_bytes())
+            annotation.write_text('changed')
+            with self.assertRaisesRegex(ValueError, 'Publisher annotation audit changed'):
+                prepare_data(root, root/'publisher-rejected', False, expanded_data=source)
+            self.assertFalse((root/'publisher-rejected').exists())
+            (source/'manifest.json').write_text(json.dumps({'selection':selected}))
             (source/'labels/train/train0.txt').write_text('changed')
             with self.assertRaisesRegex(ValueError,'Expanded input changed'):
                 prepare_data(root,root/'rejected',False,expanded_data=source)

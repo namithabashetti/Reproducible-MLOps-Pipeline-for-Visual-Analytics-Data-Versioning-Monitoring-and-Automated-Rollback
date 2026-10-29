@@ -1,0 +1,13 @@
+{
+  "dataset": "data/expanded-shel5k-v1",
+  "dataset_dvc_md5": "ec398edfa361f9d9b4952019bb04411e.dir",
+  "seed": 42,
+  "test_policy": "Freeze every checkpoint after validation before scoring the reused held-out test. Historical model 5 already evaluated these images; this is not pristine external acceptance.",
+  "jobs": [
+    {"model_id": "1", "epochs": 30, "run": "shel5k-v1-30e", "historical_run": "baseline"},
+    {"model_id": "2", "epochs": 30, "run": "retrain-model2-30e", "historical_run": "fulltrain-v1"},
+    {"model_id": "3", "epochs": 30, "run": "retrain-model3-30e", "historical_run": "assisted-fulltrain-v1"},
+    {"model_id": "4", "epochs": 60, "run": "retrain-model4-60e", "historical_run": "expanded-css-v1-60e"},
+    {"model_id": "5", "epochs": 70, "run": "retrain-model5-70e", "historical_run": "protocol-v2-30e"}
+  ]
+}

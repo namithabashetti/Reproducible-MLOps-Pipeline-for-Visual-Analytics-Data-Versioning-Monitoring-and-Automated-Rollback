@@ -3,20 +3,24 @@
 import hashlib
 import json
 import math
+import os
 from pathlib import Path
 import time
 
 import numpy as np
 
 
-def evaluate(weights, data, output, device, image_size, batch_size, evaluation_split='validation'):
+def evaluate(weights, data, output, device, image_size, batch_size, evaluation_split='validation', *, plots=False):
+    os.environ.setdefault('YOLO_CONFIG_DIR',str(Path(__file__).resolve().parents[2]/'artifacts/ultralytics-settings'))
+    os.environ.setdefault('YOLO_OFFLINE','true')
+    os.environ.setdefault('YOLO_AUTOINSTALL','false')
     from ultralytics import YOLO
 
     if evaluation_split not in ('validation', 'test'):
         raise ValueError('Unsupported evaluation split')
     model = YOLO(str(weights))
     result = model.val(data=str(data), split="val", device=device, imgsz=image_size,
-                       batch=batch_size, workers=0, plots=False, verbose=False,
+                       batch=batch_size, workers=0, plots=plots, verbose=False,
                        conf=.001, iou=.7, max_det=300, rect=False, half=False, augment=False,
                        project=str(output), name="evaluation", exist_ok=False)
     metrics = {"precision": float(result.box.mp), "recall": float(result.box.mr),
@@ -34,12 +38,17 @@ def evaluate(weights, data, output, device, image_size, batch_size, evaluation_s
                  if evaluation_split == 'validation' else
                  "Held-out protocol test; checkpoint and evaluation settings were frozen before scoring. Source-label limitations remain."),
     }
+    if plots and getattr(result, 'confusion_matrix', None) is not None:
+        report['confusion_matrix'] = result.confusion_matrix.matrix.tolist()
+        report['confusion_matrix_classes'] = [*model.names.values(), 'background']
     (output / "metrics.json").write_text(json.dumps(report, indent=2) + "\n", encoding="utf-8")
     return report
 
 
 def protocol_test_membership(manifest, selected):
     """Only a freshly trained grouped protocol can use the reassigned final test."""
+    if manifest.get('final_test_status'):
+        raise ValueError('This test pool was already consumed; it is not a fresh final test')
     if manifest.get('protocol') != 'grouped-70-15-15-v1':
         raise ValueError('Final test requires fresh grouped-protocol training')
     splits = manifest['selection']
@@ -220,17 +229,120 @@ def validation_cohorts(selection, manifest):
     return cohorts
 
 
+def compare_research_labels(project, source, output, candidate=None):
+    """Score published-label development cohorts without touching the consumed test."""
+    import shutil
+    import torch
+    import yaml
+    from src.tracking.mlflow_utils import file_hash, read_completed_run
+
+    source = source.resolve()
+    if source.parent != (project/'data').resolve() or not source.name.startswith('expanded-shel5k-'):
+        raise ValueError('Expected an isolated SHEL5K candidate')
+    manifest = json.loads((source/'manifest.json').read_text())
+    selection = json.loads((source/'selection.json').read_text())
+    cohorts = validation_cohorts(selection, manifest)
+    shared = json.loads((project/'artifacts/training/expanded-css-v1-60e/inputs/selection.json').read_text())['validation']
+    if not set(shared) <= set(cohorts['combined']):
+        raise ValueError('The protected shared cohort changed')
+    cohorts['shared196'] = shared
+    models = {'model_5': (project/'artifacts/training/protocol-v2-30e', ['combined', 'original', 'additional']),
+              'model_4': (project/'artifacts/training/expanded-css-v1-60e', ['shared196'])}
+    if candidate is not None:
+        if file_hash(candidate.resolve()/'inputs/manifest.json') != file_hash(source/'manifest.json'):
+            raise ValueError('Candidate was trained on a different label version')
+        models['candidate'] = (candidate.resolve(), list(cohorts))
+    # Verify completed source runs and train/cohort isolation before writing outputs.
+    for run, wanted in models.values():
+        read_completed_run(run)
+        trained = set(json.loads((run/'inputs/selection.json').read_text())['train'])
+        if any(trained.intersection(cohorts[name]) for name in wanted):
+            raise ValueError('Model trained on its requested evaluation cohort')
+    output.mkdir(parents=True, exist_ok=False)
+    inputs = output/'inputs'
+    hashes = json.loads((source/'input-sha256.json').read_text())
+    copied = {}
+    for kind, suffix in (('images','.png'),('labels','.txt')):
+        destination = inputs/kind/'validation'
+        destination.mkdir(parents=True)
+        for name in cohorts['combined']:
+            relative = f'{kind}/validation/{name}{suffix}'
+            target = destination/(name+suffix)
+            shutil.copy2(source/relative, target)
+            copied[relative] = file_hash(target)
+            if copied[relative] != hashes[relative]:
+                raise ValueError('Changed evaluation input: '+relative)
+    (output/'input-sha256.json').write_text(json.dumps(copied,indent=2)+'\n')
+    configs = {}
+    for cohort, names in cohorts.items():
+        paths = output/(cohort+'.txt')
+        paths.write_text(''.join(str((inputs/'images/validation'/(n+'.png')).resolve())+'\n' for n in names))
+        config = output/(cohort+'.yaml')
+        config.write_text(yaml.safe_dump({'path':str(inputs.resolve()), 'train':'images/validation',
+                                          'val':str(paths.resolve()), 'names':{0:'helmet',1:'head',2:'person'}}))
+        configs[cohort] = config
+    summary = {'status':'running', 'dataset_manifest_sha256':file_hash(source/'manifest.json'),
+               'evaluation_code_sha256':file_hash(Path(__file__)),
+               'cohort_ids':cohorts, 'models':{}, 'production_approval':False,
+               'note':'Corrected publisher-label development comparison. No final-test evaluation.',
+               'settings':{'image_size':416,'confidence':.001,'iou':.7,'max_det':300,'rect':False,
+                           'half':False,'augment':False,'batch_size':4}}
+    (output/'comparison.json').write_text(json.dumps(summary,indent=2)+'\n')
+    torch.set_num_threads(2)
+    for label,(run,wanted) in models.items():
+        record = {'checkpoint_sha256':file_hash(run/'fit/weights/best.pt'),'validation':{}}
+        for cohort in wanted:
+            destination = output/label/cohort
+            destination.mkdir(parents=True)
+            result = evaluate(run/'fit/weights/best.pt', configs[cohort], destination, 'cpu', 416, 4)
+            record['validation'][cohort] = {'metrics':result['metrics'],'per_class':result['per_class']}
+            summary['models'][label] = record
+            (output/'comparison.json').write_text(json.dumps(summary,indent=2)+'\n')
+    if any(file_hash(inputs/name) != digest for name,digest in copied.items()):
+        raise ValueError('Evaluation inputs changed during scoring')
+    summary['status'] = 'completed'
+    if candidate is not None:
+        summary['research_selection'] = research_selection(summary['models'])
+    (output/'comparison.json').write_text(json.dumps(summary,indent=2)+'\n')
+    return summary
+
+
+def research_selection(models):
+    """Predeclared development criteria; never grant production/stable approval."""
+    checks, deltas = {}, {}
+    for baseline, cohort in (('model_5','combined'), ('model_4','shared196')):
+        old = models[baseline]['validation'][cohort]
+        new = models['candidate']['validation'][cohort]
+        delta = {'overall':new['metrics']['map50_95']-old['metrics']['map50_95']}
+        old_classes = {r['Class']:r['mAP50-95'] for r in old['per_class']}
+        new_classes = {r['Class']:r['mAP50-95'] for r in new['per_class']}
+        delta.update({c:new_classes[c]-old_classes[c] for c in ('helmet','head','person')})
+        deltas[baseline] = delta
+        required_person_gain = .05 if baseline == 'model_5' else 0
+        checks[baseline] = (delta['person'] >= required_person_gain-1e-12 and
+                            delta['overall'] >= -1e-12 and
+                            delta['helmet'] >= -.02-1e-12 and delta['head'] >= -.02-1e-12)
+    return {'criteria_passed':checks, 'candidate_minus_baseline_ap50_95':deltas,
+            'research_target_met':all(checks.values()), 'production_approval':False,
+            'automatic_deployment':False}
+
+
 if __name__ == '__main__':
     import argparse
     parser = argparse.ArgumentParser(description='Compare a completed expanded-data experiment without retraining')
     mode = parser.add_mutually_exclusive_group(required=True)
     mode.add_argument('--compare-run',type=Path)
     mode.add_argument('--test-run',type=Path)
+    mode.add_argument('--research-data',type=Path)
     parser.add_argument('--output',type=Path)
     parser.add_argument('--extra-run',type=Path)
     args = parser.parse_args()
     project = Path(__file__).resolve().parents[2]
-    if args.test_run:
+    if args.research_data:
+        if not args.output:
+            parser.error('--research-data requires a new --output directory')
+        result=compare_research_labels(project,args.research_data,args.output.resolve(),args.extra_run)
+    elif args.test_run:
         if args.output or args.extra_run:
             parser.error('--test-run uses its fixed final-test directory and cannot compare older models')
         result=evaluate_protocol_test(project,args.test_run.resolve())

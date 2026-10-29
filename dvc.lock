@@ -18,8 +18,8 @@ stages:
       size: 6256
     - path: src/data/validate.py
       hash: md5
-      md5: cf97874a62ca6972f070159efc08e8ec
-      size: 6508
+      md5: a58299351ab9f00edfa7eab1554f6954
+      size: 7149
     params:
       params.yaml:
         data:
@@ -65,8 +65,8 @@ stages:
       size: 6816
     - path: src/data/validate.py
       hash: md5
-      md5: cf97874a62ca6972f070159efc08e8ec
-      size: 6508
+      md5: a58299351ab9f00edfa7eab1554f6954
+      size: 7149
     params:
       params.yaml:
         preprocessing:
@@ -77,7 +77,8 @@ stages:
           raw_path: dataset
           processed_path: data/processed
           annotation_format: pascal_voc_xml
-          provenance_status: unverified
+          provenance_status: release_identity_verified
+          provenance_record: data/source-provenance.json
           classes:
             0: helmet
             1: head

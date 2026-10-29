@@ -51,6 +51,16 @@ class DatasetValidationTests(unittest.TestCase):
                 with self.assertRaises(ValueError):
                     validate_dataset(self.root, {"helmet"})
 
+    def test_provenance_is_bound_to_current_bytes(self):
+        original = validate_dataset(self.root, {"helmet", "head"})
+        record = {"status": "release_identity_verified",
+                  "raw_content_manifest_sha256": original["content_manifest_sha256"]}
+        self.assertEqual(validate_dataset(self.root, {"helmet", "head"}, record)["provenance_status"],
+                         "release_identity_verified")
+        self.xml.write_text(self.annotation.replace("helmet", "head"))
+        with self.assertRaisesRegex(ValueError, "no longer match"):
+            validate_dataset(self.root, {"helmet", "head"}, record)
+
     def test_missing_and_orphan_labels(self):
         self.xml.rename(self.root / "annotations/other.xml")
         with self.assertRaisesRegex(ValueError, "Unpaired"):

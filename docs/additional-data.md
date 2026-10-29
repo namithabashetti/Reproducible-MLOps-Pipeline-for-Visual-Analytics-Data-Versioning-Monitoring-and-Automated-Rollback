@@ -125,7 +125,7 @@ and reserved external test images remain unchanged. Upload raw PNGs, not sheets.
 
 The complete model 1 → 4 → 1 controlled rollback passed on 25 October 2026:
 `reports/live-demo-9d6d6df4e8e5/result.json`. Normal model 4 was restored afterward.
-See [faculty-demo.md](faculty-demo.md) for the recovery evidence and interrupted prior run.
+See [PROJECT_GUIDE.md](../PROJECT_GUIDE.md) for the recovery evidence and interrupted prior run.
 
 ## 27 October 2026: corrected protocol and current comparison
 

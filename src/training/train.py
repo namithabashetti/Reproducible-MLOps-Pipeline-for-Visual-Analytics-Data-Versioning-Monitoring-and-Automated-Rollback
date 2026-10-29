@@ -53,6 +53,9 @@ def prepare_data(project, destination, smoke, reviewed_data=None, expanded_data=
         if source.parent != (project / 'data').resolve() or not re.fullmatch(r'expanded-[A-Za-z0-9_-]+',source.name):
             raise ValueError("Expanded data must be an isolated data/expanded-* export")
         expanded = json.loads((source/'manifest.json').read_text())
+        if expanded.get('label_upgrade'):
+            if hashlib.sha256((source/'annotation-provenance.json').read_bytes()).hexdigest() != expanded['label_upgrade']['audit_sha256']:
+                raise ValueError('Publisher annotation audit changed')
         selected_export = json.loads((source/'selection.json').read_text())
         if selected_export != {s:expanded['selection'][s] for s in ('train','validation')}:
             raise ValueError("Expanded candidate selection disagrees with its manifest")
@@ -134,6 +137,8 @@ def prepare_data(project, destination, smoke, reviewed_data=None, expanded_data=
     if expanded_data is not None:
         for name in ('manifest.json','audit.json','README.dataset.txt','README.roboflow.txt'):
             shutil.copy2(source/name,destination/name)
+        if expanded.get('label_upgrade'):
+            shutil.copy2(source/'annotation-provenance.json', destination/'annotation-provenance.json')
     if reviewed_data is not None or expanded_data is not None:
         hashes = {p.relative_to(destination).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
                   for category in ("images", "labels") for p in sorted((destination / category).rglob('*')) if p.is_file()}
@@ -306,6 +311,9 @@ def main():
             sources.append(project / "scripts/annotation_triage.py")
     if expanded_candidate:
         sources += [expanded_pointer,project/'scripts/audit_additional_data.py',project/'scripts/prepare_additional_data.py']
+        if json.loads((expanded_path/'manifest.json').read_text()).get('label_upgrade'):
+            sources += [project/'scripts/prepare_shel5k.py', project/'docs/research-quality-upgrade.md',
+                        project/'data/source-provenance.json']
     source_hashes = {}
     for path in sources:
         relative = path.relative_to(project)

@@ -5,10 +5,45 @@ from pathlib import Path
 import tempfile
 import unittest
 from prometheus_client.parser import text_string_to_metric_families
-from src.monitoring.dashboard import evidence_metrics,project_status,recorded_summary
+from src.monitoring.dashboard import evidence_metrics,project_status,recorded_summary,history
 
 
 class DashboardTests(unittest.TestCase):
+    def test_current_research_run_does_not_inherit_old_completed_evaluations(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary)
+            for name in ('protocol-v2-30e','shel5k-v1-30e'):
+                run=root/'artifacts/training'/name
+                (run/'fit').mkdir(parents=True)
+                (run/'lineage.json').write_text('{"epochs_requested":30}')
+                (run/'fit/results.csv').write_text('epoch,train/loss\n1,0.9\n')
+            old=root/'reports/final-audit-20261026/comparison-with-protocol'
+            old.mkdir(parents=True)
+            (old/'comparison.json').write_text('{"status":"completed"}')
+            state=project_status(root)['training']
+            self.assertEqual(state['run'],'shel5k-v1-30e')
+            self.assertEqual(state['epochs_recorded'],1)
+            self.assertFalse(state['comparison_complete'])
+            self.assertFalse(state['final_test_required'])
+            self.assertIn('kept separate',state['note'])
+
+    def test_continuous_recovery_is_visible_without_a_finished_session(self):
+        with tempfile.TemporaryDirectory() as temporary:
+            root=Path(temporary);report=root/'reports/live-demo-fixture';report.mkdir(parents=True)
+            (report/'session.json').write_text(json.dumps({'source_versions':['1','4']}))
+            (report/'automatic-recovery.json').write_text(json.dumps({'status':'recovered',
+                'completed_at':'2026-10-28T12:00:00+00:00','decision':{'reasons':['readiness']}}))
+            rows=history(root)
+            self.assertEqual(len(rows),1)
+            self.assertEqual((rows[0]['previous_model'],rows[0]['recovery_model']),('4','1'))
+            (report/'result.json').write_text(json.dumps({'mode':'automatic','status':'stopped'}))
+            self.assertEqual(len(history(root)),1)
+            (report/'result.json').write_text(json.dumps({'mode':'automatic','status':'failed',
+                'original_api_restored':{'model':{'model_version':'4'}}}))
+            row=history(root)[0]
+            self.assertEqual(row['status'],'recovered; session failed')
+            self.assertEqual(row['normal_model'],'4')
+
     def test_new_comparison_requires_matching_cohort_and_registration(self):
         with tempfile.TemporaryDirectory() as temporary:
             root=Path(temporary)

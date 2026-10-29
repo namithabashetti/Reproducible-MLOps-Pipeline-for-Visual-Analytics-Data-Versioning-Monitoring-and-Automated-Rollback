@@ -126,6 +126,10 @@ def read_completed_run(directory):
             if not path.is_relative_to(directory/'inputs') or file_hash(path) != digest:
                 raise ValueError("Expanded training input was changed")
         files += ['inputs/'+name for name in ('manifest.json','audit.json','input-sha256.json','README.dataset.txt','README.roboflow.txt')]
+        if manifest.get('label_upgrade'):
+            if file_hash(directory/'inputs/annotation-provenance.json') != manifest['label_upgrade']['audit_sha256']:
+                raise ValueError('Publisher annotation provenance changed')
+            files.append('inputs/annotation-provenance.json')
     if "reviewed_data" in lineage:
         candidate = lineage["reviewed_data"]
         relative = Path(candidate["path"])

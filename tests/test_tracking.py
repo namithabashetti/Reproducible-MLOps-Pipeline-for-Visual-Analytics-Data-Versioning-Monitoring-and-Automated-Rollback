@@ -61,6 +61,18 @@ class TrackingTests(unittest.TestCase):
         lineage['file_sha256']['data/expanded-fixture.dvc']=file_hash(pointer)
         (directory/'lineage.json').write_text(json.dumps(lineage))
         self.assertEqual(read_completed_run(directory)[0]['dataset_dvc_md5'],'expanded.dir')
+        annotation = inputs/'annotation-provenance.json'
+        annotation.write_text('{"source":"publisher fixture"}')
+        manifest['label_upgrade'] = {'audit_sha256':file_hash(annotation)}
+        (inputs/'manifest.json').write_text(json.dumps(manifest))
+        lineage['expanded_data']['manifest_sha256'] = file_hash(inputs/'manifest.json')
+        (directory/'lineage.json').write_text(json.dumps(lineage))
+        self.assertIn('inputs/annotation-provenance.json', read_completed_run(directory)[4])
+        saved = annotation.read_bytes()
+        annotation.write_text('tampered')
+        with self.assertRaisesRegex(ValueError, 'Publisher annotation provenance changed'):
+            read_completed_run(directory)
+        annotation.write_bytes(saved)
         lineage['dataset_dvc_md5']='raw.dir'
         (directory/'lineage.json').write_text(json.dumps(lineage))
         with self.assertRaisesRegex(ValueError,'Expanded dataset identity mismatch'):
