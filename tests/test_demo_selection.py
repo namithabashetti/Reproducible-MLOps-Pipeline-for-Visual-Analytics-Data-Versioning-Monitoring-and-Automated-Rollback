@@ -17,12 +17,15 @@ from src.serving import console, demo_selection as demo
 class DemoSelectionTests(unittest.TestCase):
     def setUp(self):
         self.previous=demo.selected.copy()
+        self.previous_guard=demo.confidence_guard.copy()
         demo.selected.update(model=None,manifest=None)
+        demo.confidence_guard.update(consecutive_low=0,last_max_confidence=None,last_trigger=None,last_error=None)
         self.client=TestClient(console.app,base_url='http://127.0.0.1:8767')
         self.headers={'X-Console-Token':console.TOKEN}
 
     def tearDown(self):
         demo.selected.update(self.previous)
+        demo.confidence_guard.update(self.previous_guard)
 
     def manifest(self, version='1'):
         return {'model_name':'hard-hat-detector','model_version':version,'checkpoint_sha256':'sha'+version,
@@ -68,6 +71,43 @@ class DemoSelectionTests(unittest.TestCase):
         self.assertEqual(value['detections'],[])
         self.assertIs(predict.call_args.args[0],model)
         production.assert_not_called()
+
+    def test_three_low_confidence_predictions_automatically_switch_demo_fallback(self):
+        manifest={**self.manifest('10'),'demo_model_id':'5','generation':'retrained',
+                  'selection_mode':'demonstration','run':'retrain-model5-70e'}
+        demo.selected.update(model=object(),manifest=manifest)
+        fallback={**self.manifest('9'),'demo_model_id':'4','generation':'retrained',
+                  'selection_mode':'demonstration','run':'retrain-model4-60e'}
+        with patch.object(demo,'decode_image',return_value=np.zeros((12,16,3),dtype=np.uint8)), \
+                patch.object(demo,'predict_image',return_value=[{'class_name':'helmet','confidence':.84}]), \
+                patch.object(demo,'choose',return_value=fallback) as choose:
+            first=demo.predict(b'png')
+            second=demo.predict(b'png')
+            third=demo.predict(b'png')
+        self.assertFalse(first['automatic_fallback']['triggered'])
+        self.assertEqual(second['automatic_fallback']['consecutive_low_confidence_predictions'],2)
+        self.assertTrue(third['automatic_fallback']['triggered'])
+        self.assertEqual(third['automatic_fallback']['from_model']['demo_model_id'],'5')
+        self.assertEqual(third['automatic_fallback']['to_model']['demo_model_id'],'4')
+        self.assertIn('3 consecutive images',third['automatic_fallback']['reason'])
+        choose.assert_called_once_with(Path(__file__).resolve().parents[1],'4','retrained')
+
+    def test_confidence_at_or_above_threshold_resets_consecutive_low_count(self):
+        manifest={**self.manifest('10'),'demo_model_id':'5','generation':'retrained',
+                  'selection_mode':'demonstration','run':'retrain-model5-70e'}
+        demo.selected.update(model=object(),manifest=manifest)
+        with patch.object(demo,'decode_image',return_value=np.zeros((12,16,3),dtype=np.uint8)), \
+                patch.object(demo,'predict_image',side_effect=[
+                    [{'class_name':'helmet','confidence':.84}],
+                    [{'class_name':'helmet','confidence':.91}],
+                    [{'class_name':'helmet','confidence':.84}],
+                    [{'class_name':'helmet','confidence':.84}]]), \
+                patch.object(demo,'choose') as choose:
+            demo.predict(b'png'); reset=demo.predict(b'png'); demo.predict(b'png'); final=demo.predict(b'png')
+        self.assertEqual(reset['automatic_fallback']['consecutive_low_confidence_predictions'],0)
+        self.assertFalse(final['automatic_fallback']['triggered'])
+        self.assertEqual(final['automatic_fallback']['consecutive_low_confidence_predictions'],2)
+        choose.assert_not_called()
 
     def test_controls_types_size_missing_model_and_corrupt_images(self):
         self.assertEqual(self.client.post('/models/select',json={'model_id':'1','generation':'historical'}).status_code,403)

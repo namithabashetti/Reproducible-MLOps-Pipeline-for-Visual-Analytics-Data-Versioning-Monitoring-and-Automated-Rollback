@@ -86,3 +86,10 @@ rollback:
 demo:
   server_error_fault_enabled: false
   server_error_every_n_predictions: 10
+  automatic_fallback:
+    enabled: true
+    candidate_model_id: '5'
+    fallback_model_id: '4'
+    generation: retrained
+    max_confidence_threshold: 0.90
+    consecutive_predictions: 3

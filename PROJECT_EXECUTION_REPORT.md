@@ -163,10 +163,18 @@ to 1.0, measured AP50–95 on the same 250 labeled images (42.09% predecessor,
 verified three readiness checks, 20 recovery predictions, resumed monitoring,
 and remeasured 42.09% after recovery. Finally, it restored the normal API to
 Model 4 at confidence 0.25. Result: `reports/live-demo-f0dae91841ce/result.json`.
-The home page's images do not themselves cause rollback; the report and guide now
-explain the protected pipeline test sequence. One supplied `ryert.png` is encoded
-as WEBP despite its extension, so the PNG/JPEG endpoint rejects it unless it is
-re-saved as a real PNG or JPEG.
+The home-page selector and the Docker deployment remain distinct. A separate
+presentation confidence guard now switches retrained demo Model 5 to Model 4
+after three consecutive images with maximum detection confidence below 0.90.
+This threshold is an initial demo rule, not calibrated accuracy. The five user
+images scored 0.6237, 0.7927, 0.8308, 0.8815 and 0.8478 on Model 5; each falls
+below the configured guard threshold. Live requests switched on the third image;
+the remaining two were served by Model 4. The selector is re-armed on Model 5.
+Metadata-only receipt: `reports/startup/demo-confidence-fallback-20261029.json`.
+The guide explains the selector fallback and the separate deployment rollback.
+One supplied `ryert.png` was encoded as
+WEBP despite its extension; an actual PNG copy was saved as
+`C:\Users\varsh\Downloads\ryert_converted.png` without changing the original.
 
 ## 9. Cleanup
 
@@ -179,6 +187,13 @@ Only `docs/faculty-demo.md` was removed after consolidation. Its original copy a
 ## 11. Checks performed
 
 Final post-training suite: **131 tests passed in 48.750 seconds**, using `.\.venv\Scripts\python.exe -m unittest discover -s tests`. Log: `reports/startup/final-post-training-tests-20261029.log`. All five retrained models were then individually loaded and used for real sample predictions. Registry checkpoint hashes and MLflow evaluation artifacts matched; deployed checkpoint and main registry aliases remained unchanged. Evidence: `reports/startup/final-model-verification-20261029.json`. Earlier checks below remain historical evidence.
+
+After adding the automatic image-confidence fallback, the full local suite passed
+**133 tests in 72.324 seconds**. The six focused selector tests, Python source
+compilation and dashboard JavaScript syntax check also passed. Five supplied
+images automatically switched the selected demo from Model 5 to Model 4 on the
+third consecutive score below 0.90; receipt:
+`reports/startup/demo-confidence-fallback-20261029.json`.
 
 - Prior full local suite: **131 tests passed** (`final-selector-tests.log`).
 - Latest selector tests: `python -m unittest discover -s tests -p test_demo_selection.py` — **4 passed**.
@@ -197,5 +212,5 @@ Final post-training suite: **131 tests passed in 48.750 seconds**, using `.\.ven
 - The test pool is reused; independent external acceptance would require new separately collected images.
 - Publisher-label completeness and full upstream photo-rights history are not independently established. Research metrics do not establish production suitability.
 - Physical webcam capture, live inference, switching and stopping passed. Metadata-only evidence: `reports/startup/camera-check-20261029.json`. Detection accuracy in a real deployment site still requires separate labeled evaluation.
-- GitHub Actions run [40874446678](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/40874446678) completed successfully on implementation commit `5427374b73fc8238d60923183e7e83caf5b22a49`. It compiled the sources, ran isolated tests, validated monitoring, and built the Docker image; deployment was set to `none`. Later commits update only this report with camera-check evidence and the CI receipt; no source code changed after the validated implementation commit.
+- GitHub Actions run [40874446678](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/40874446678) completed successfully on implementation commit `5427374b73fc8238d60923183e7e83caf5b22a49`. It compiled sources, ran isolated tests, validated monitoring, and built the Docker image; deployment was set to `none`. That run predates the automatic image-confidence fallback added for this presentation; the newer changes were validated locally as recorded below.
 - No production promotion, automatic retraining or extra dataset transfer was performed in this finalization.

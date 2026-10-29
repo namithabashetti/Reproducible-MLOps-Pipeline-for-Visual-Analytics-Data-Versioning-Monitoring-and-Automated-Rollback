@@ -352,7 +352,7 @@ async def predict(request: Request):
         if len(body)+len(chunk)>MAX_BYTES:
             raise HTTPException(413,'Image must be under 4 MB')
         body.extend(chunk)
-    value=await run_in_threadpool(demo_selection.predict,bytes(body))
+    value=await run_in_threadpool(demo_selection.predict,bytes(body),ROOT)
     request.state.demo_identity=(value['demo_model_id'],str(value['model_version']))
     return value
 

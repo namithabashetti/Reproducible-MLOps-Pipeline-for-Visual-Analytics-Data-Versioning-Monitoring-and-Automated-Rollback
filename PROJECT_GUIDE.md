@@ -311,14 +311,28 @@ scheduled audits and, after recovery, `automatic-recovery.json`. `result.json`
 appears when a session stops or fails. Historical successful and failed tests are
 retained. A past recovery followed by a watcher failure is not full session success.
 
-### Repeatable quality rollback for a presentation
+### Automatic image fallback and quality rollback for a presentation
 
-The home page (`/`) uses an isolated model selector. Its image predictions compare
-models and cannot roll back the watched deployment. Use the protected detector on
-`/pipeline` and `/deployment/health`. One photo's confidence is not accuracy, so a
-normal miss alone does not qualify for recovery.
+The home page (`/`) now has an automatic image-confidence fallback for the college
+demo. Select **Retrained with corrected labels → Model 5**. Three consecutive
+images with a maximum detection confidence below **0.90** automatically switch
+the selected demo model to **Model 4**. The page announces the switch, identifies
+which model made each prediction, and uses Model 4 for the next image. No
+**Start controlled quality test** click is needed for this demonstration. The
+confidence threshold is an initial presentation rule, not calibrated accuracy.
+On the five images supplied for the demonstration, measured maxima on Model 5
+were 62.37%, 79.27%, 83.08%, 88.15% and 84.78%, so they cross the rule within
+three consecutive requests. The automatic Model 5 → Model 4 switch passed with
+the first three images, and the last two were then predicted by Model 4. A local
+metadata-only receipt is `reports/startup/demo-confidence-fallback-20261029.json`;
+the page is left armed on Model 5 so the sequence can be repeated.
 
-To demonstrate a repeatable automatic quality rollback, open
+This image guard switches the isolated demo selection. The protected Docker
+deployment remains separately visible at `/pipeline` and `/deployment/health`;
+its watcher starts automatically and uses readiness failures or measured labeled
+quality drops for deployment rollback. One image's confidence is not accuracy.
+
+To repeat the separate labeled-quality rollback, open
 `http://127.0.0.1:8767/pipeline`, select **Model 4**, then click **Start controlled
 quality test**. It loads the verified predecessor, then deliberately sets the
 candidate confidence threshold to **1.0**, which suppresses detections. Upload the

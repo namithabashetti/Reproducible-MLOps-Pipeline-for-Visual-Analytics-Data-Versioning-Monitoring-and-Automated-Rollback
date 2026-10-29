@@ -1,17 +1,20 @@
 """One local demonstration model, independent of Docker deployment and registry aliases."""
 import hashlib
 import json
+from pathlib import Path
 from threading import RLock
 from time import perf_counter
 
 from fastapi import HTTPException
 from prometheus_client import CollectorRegistry, Counter, Gauge, Histogram, generate_latest
+import yaml
 
 from src.serving.api import decode_image, load_model, predict_image
 from src.serving.deploy import stage_model, write_receipt
 
 lock = RLock()
 selected = {'model': None, 'manifest': None}
+confidence_guard = {'consecutive_low': 0, 'last_max_confidence': None, 'last_trigger': None, 'last_error': None}
 registry = CollectorRegistry()
 requests = Counter('va_demo_requests', 'Local demonstration requests by actual model and outcome',
                    ('model_id','version','outcome'), registry=registry)
@@ -42,11 +45,33 @@ def catalog(project):
     return rows
 
 
-def health():
+def fallback_policy(project=None):
+    project = Path(project) if project is not None else Path(__file__).resolve().parents[2]
+    config = yaml.safe_load((project/'configs/config.yaml').read_text(encoding='utf-8'))
+    policy = config['demo']['automatic_fallback']
+    if type(policy.get('enabled')) is not bool or not 0 < policy.get('max_confidence_threshold', 0) <= 1 or \
+            type(policy.get('consecutive_predictions')) is not int or policy['consecutive_predictions'] < 1 or \
+            policy.get('candidate_model_id') == policy.get('fallback_model_id'):
+        raise ValueError('Invalid automatic demonstration fallback policy')
+    return policy
+
+
+def health(project=None):
     with lock:
         if selected['manifest'] is None:
             raise HTTPException(503, 'Select an available demonstration model')
-        return {'status':'ready', **selected['manifest']}
+        policy = fallback_policy(project)
+        armed = (policy['enabled'] and selected['manifest']['demo_model_id'] == policy['candidate_model_id'] and
+                 selected['manifest']['generation'] == policy['generation'])
+        return {'status':'ready', **selected['manifest'], 'automatic_fallback': {
+            'enabled': policy['enabled'], 'armed': armed,
+            'threshold': policy['max_confidence_threshold'],
+            'required_consecutive_predictions': policy['consecutive_predictions'],
+            'consecutive_low_confidence_predictions': confidence_guard['consecutive_low'],
+            'candidate_model_id': policy['candidate_model_id'],
+            'fallback_model_id': policy['fallback_model_id'],
+            'generation': policy['generation'], 'last_max_confidence': confidence_guard['last_max_confidence'],
+            'last_trigger': confidence_guard['last_trigger'], 'last_error': confidence_guard['last_error']}}
 
 
 def choose(project, model_id, generation, expected_checksum=None):
@@ -70,12 +95,13 @@ def choose(project, model_id, generation, expected_checksum=None):
         # Publish only after successful verification; failure retains the old in-memory model.
         write_receipt(project/'artifacts/serving/demo-selection.json',manifest)
         selected.update(model=candidate,manifest=manifest)
+        confidence_guard.update(consecutive_low=0, last_max_confidence=None, last_error=None)
         active.clear()
         active.labels(model_id,str(manifest['model_version']),generation,manifest['checkpoint_sha256']).set(1)
         return health()
 
 
-def predict(body):
+def predict(body, project=None):
     started = perf_counter()
     with lock:
         manifest = selected['manifest']
@@ -89,12 +115,43 @@ def predict(body):
         detections = predict_image(selected['model'], image, settings)
         seconds = perf_counter()-before
         inference.labels(manifest['demo_model_id'],str(manifest['model_version'])).observe(seconds)
-        return {**{k:manifest[k] for k in ('model_name','model_version','checkpoint_sha256','deployment_mode',
+        maximum = max((float(d['confidence']) for d in detections), default=0.0)
+        policy = fallback_policy(project)
+        applies = (policy['enabled'] and manifest['demo_model_id'] == policy['candidate_model_id'] and
+                   manifest['generation'] == policy['generation'])
+        confidence_guard['last_max_confidence'] = maximum
+        confidence_guard['last_error'] = None
+        if applies and maximum < policy['max_confidence_threshold']:
+            confidence_guard['consecutive_low'] += 1
+        else:
+            confidence_guard['consecutive_low'] = 0
+        fallback_event = {'triggered': False, 'armed': applies,
+                          'threshold': policy['max_confidence_threshold'],
+                          'consecutive_low_confidence_predictions': confidence_guard['consecutive_low'],
+                          'required_consecutive_predictions': policy['consecutive_predictions'],
+                          'max_detection_confidence': maximum}
+        if applies and confidence_guard['consecutive_low'] >= policy['consecutive_predictions']:
+            source = {'demo_model_id': manifest['demo_model_id'], 'model_version': manifest['model_version'],
+                      'checkpoint_sha256': manifest['checkpoint_sha256']}
+            try:
+                restored = choose(project or Path(__file__).resolve().parents[2], policy['fallback_model_id'],
+                                  policy['generation'])
+                fallback_event.update(triggered=True, from_model=source,
+                    to_model={'demo_model_id': restored['demo_model_id'], 'model_version': restored['model_version'],
+                              'checkpoint_sha256': restored['checkpoint_sha256'],
+                              'generation': restored['generation']},
+                    reason=f"{policy['consecutive_predictions']} consecutive images had maximum detection confidence below {policy['max_confidence_threshold']:.2f}")
+                confidence_guard.update(consecutive_low=0, last_trigger=fallback_event)
+            except Exception as error:
+                confidence_guard.update(consecutive_low=0, last_error=type(error).__name__)
+                fallback_event.update(error=type(error).__name__)
+        response = {**{k:manifest[k] for k in ('model_name','model_version','checkpoint_sha256','deployment_mode',
                                          'demo_model_id','generation','selection_mode','run')},
             'inference_sha256':hashlib.sha256(json.dumps(settings,sort_keys=True).encode()).hexdigest(),
             'confidence_threshold':settings['confidence'],'inference_ms':seconds*1000,
             'processing_ms':(perf_counter()-started)*1000,'width':image.shape[1],'height':image.shape[0],
-            'detections':detections,'audit_requested':False}
+            'detections':detections,'audit_requested':False,'automatic_fallback':fallback_event}
+        return response
 
 
 def metrics():
