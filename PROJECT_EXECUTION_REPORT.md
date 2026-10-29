@@ -154,6 +154,20 @@ A later all-service interruption was handled by checking absent process ownershi
 
 The latest controlled outage also passed a live 90-second continuation check: `reports/startup/rollback-live-verification-20261029.json`. The watcher independently restored existing Model 4 to existing Model 1 after persistent readiness failure. This verifies operational rollback. The stale-lock status bug was fixed so an interrupted watcher reports `running: false`; the main detection page now displays protection status. Telco Churn was stopped with explicit user approval to free ports 8000/3000. It must not run on those ports simultaneously with this project.
 
+After the user reported that uploaded photos did not roll back, I traced the route
+split: `/` predicts through the isolated model selector, while `/pipeline` sends
+predictions to the protected Docker deployment. I ran the pipeline's controlled
+quality test with Model 4 as candidate. It deliberately set candidate confidence
+to 1.0, measured AP50–95 on the same 250 labeled images (42.09% predecessor,
+0.00% candidate), and the watcher automatically rolled back for `quality`. It
+verified three readiness checks, 20 recovery predictions, resumed monitoring,
+and remeasured 42.09% after recovery. Finally, it restored the normal API to
+Model 4 at confidence 0.25. Result: `reports/live-demo-f0dae91841ce/result.json`.
+The home page's images do not themselves cause rollback; the report and guide now
+explain the protected pipeline test sequence. One supplied `ryert.png` is encoded
+as WEBP despite its extension, so the PNG/JPEG endpoint rejects it unless it is
+re-saved as a real PNG or JPEG.
+
 ## 9. Cleanup
 
 Only `docs/faculty-demo.md` was removed after consolidation. Its original copy and deletion manifest are in `reports/cleanup-20261029/`. The interrupted input-copy directory was renamed and preserved, not deleted. Dataset files, labels, DVC metadata, all checkpoints, MLflow records, active logs, monitoring, Docker and CI configuration remain.
