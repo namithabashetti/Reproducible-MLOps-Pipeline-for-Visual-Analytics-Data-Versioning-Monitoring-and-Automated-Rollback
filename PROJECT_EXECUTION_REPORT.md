@@ -136,7 +136,7 @@ Use the detached resume command in chapter 26 of `PROJECT_GUIDE.md` after an int
 4. Click **Try a sample** or upload PNG/JPEG; expand prediction details to see the checkpoint used for that request.
 5. Repeat with Models 2–5. To use newly trained models, choose **Retrained with corrected labels**; only completed valid registrations are enabled.
 
-Switching verifies the actual registered weights, warm-up and checksum before replacing the selected demo model. Loading failure preserves the previous selection with an error. Each prediction carries its real model ID/version/checksum and measured inference time. Confidence is not accuracy. Demo selection does not change Docker serving, stable aliases or the rollback target. Camera code pauses and resumes capture around model loading; physical-camera behavior remains unverified.
+Switching verifies the actual registered weights, warm-up and checksum before replacing the selected demo model. Loading failure preserves the previous selection with an error. Each prediction carries its real model ID/version/checksum and measured inference time. Confidence is not accuracy. Demo selection does not change Docker serving, stable aliases or the rollback target. Physical camera capture and model switching were verified on 29 October: live 640×480 inference switched from retrained Model 5 / version 10 to Model 4 / version 9, resumed successfully, and stopped. Only model/dimension/status metadata was saved; no camera frames were saved.
 
 Testing images are available from **Download 4 faculty images** and **Download 12 test images** on the main page. Their endpoints are `/faculty-pack` and `/sample-pack`. These are examples, not images guaranteed to cause a rollback.
 
@@ -182,6 +182,6 @@ Final post-training suite: **131 tests passed in 48.750 seconds**, using `.\.ven
 - All requested epochs, final research evaluations, registry records, confusion matrices and five-model inference checks are complete.
 - The test pool is reused; independent external acceptance would require new separately collected images.
 - Publisher-label completeness and full upstream photo-rights history are not independently established. Research metrics do not establish production suitability.
-- Physical webcam permission/capture/model-switch behavior remains unverified on the user's camera. Image inference and switching are verified.
+- Physical webcam capture, live inference, switching and stopping passed. Metadata-only evidence: `reports/startup/camera-check-20261029.json`. Detection accuracy in a real deployment site still requires separate labeled evaluation.
 - Current source delivery/CI status is recorded separately; earlier successful GitHub Actions runs cannot validate a different revision.
 - No production promotion, automatic retraining or extra dataset transfer was performed in this finalization.
