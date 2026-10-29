@@ -183,5 +183,5 @@ Final post-training suite: **131 tests passed in 48.750 seconds**, using `.\.ven
 - The test pool is reused; independent external acceptance would require new separately collected images.
 - Publisher-label completeness and full upstream photo-rights history are not independently established. Research metrics do not establish production suitability.
 - Physical webcam capture, live inference, switching and stopping passed. Metadata-only evidence: `reports/startup/camera-check-20261029.json`. Detection accuracy in a real deployment site still requires separate labeled evaluation.
-- Current source delivery/CI status is recorded separately; earlier successful GitHub Actions runs cannot validate a different revision.
+- GitHub Actions run [40874446678](https://github.com/varshithdoli/Reproducible-MLOps-Pipeline-for-Visual-Analytics-Data-Versioning-Monitoring-and-Automated-Rollback/actions/runs/40874446678) completed successfully on implementation commit `5427374b73fc8238d60923183e7e83caf5b22a49`. It compiled the sources, ran isolated tests, validated monitoring, and built the Docker image; deployment was set to `none`. The current `03d5d86` head changes only this report to add the later camera-check evidence.
 - No production promotion, automatic retraining or extra dataset transfer was performed in this finalization.
